@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Horrible Car</title>
+<meta name="description" content="Horrible Car — a browser port of Atari's Road Blasters, except you drive a tan 1994 Dodge Caravan.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23110022'/><rect x='3' y='6' width='10' height='6' fill='%23ccbb88'/><rect x='4' y='4' width='8' height='3' fill='%23335566'/><rect x='3' y='12' width='2' height='2'/><rect x='11' y='12' width='2' height='2'/></svg>">
+</head>
+<body>
+<div id="cabinet">
+  <canvas id="screen" width="320" height="240" tabindex="0" aria-label="Horrible Car game screen"></canvas>
+  <noscript><p class="noscript">Horrible Car needs JavaScript enabled.</p></noscript>
+</div>
+<div id="controls-hint" aria-hidden="true">
+  <b>&larr; &rarr;</b> steer &nbsp; <b>&uarr;</b> gas &nbsp; <b>&darr;</b> brake &nbsp;
+  <b>Space</b> fire &nbsp; <b>Shift</b> special &nbsp; <b>Enter</b> start &nbsp;
+  <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>F</b> fullscreen
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

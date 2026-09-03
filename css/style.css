@@ -1,0 +1,77 @@
+/* Horrible Car — presentation shell.
+   The game itself renders into a 320x240 buffer (the Atari System 1 arcade
+   raster); everything here is about scaling that buffer up without blurring
+   it and without letting the page scroll while you are driving. */
+
+:root {
+  --bezel: #0a0a0e;
+  --glow: #1d1230;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bezel);
+  color: #a89878;
+  font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+#cabinet {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 50% 45%, var(--glow) 0%, #050508 70%, #000 100%);
+}
+
+#screen {
+  display: block;
+  /* Sized in JS to an integer-ish multiple of 320x240 with 4:3 preserved. */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+  outline: none;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 5px #17171d,
+    0 0 40px 6px rgba(90, 60, 160, 0.35),
+    0 24px 60px rgba(0, 0, 0, 0.9);
+  cursor: none;
+}
+
+#screen.show-cursor { cursor: default; }
+
+#controls-hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #6b6070;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.4s ease;
+}
+
+#controls-hint b { color: #b9a37a; font-weight: 600; }
+
+#controls-hint.faded { opacity: 0; }
+
+.noscript {
+  color: #d8cfa8;
+  text-align: center;
+  padding: 2em;
+}
+
+@media (max-height: 420px) {
+  #controls-hint { display: none; }
+}
