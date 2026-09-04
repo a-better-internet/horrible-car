@@ -69,6 +69,16 @@ export function mix(a, b, t) {
     Math.round(pa[2] + (pb[2] - pa[2]) * k)})`;
 }
 
+/**
+ * Re-express an rgb() string as rgba() with the given alpha.  Needed wherever
+ * a gradient has to fade to nothing rather than to a specific colour: fading
+ * to a flat sky colour over a *banded* sky leaves a visible square.
+ */
+export function withAlpha(cssRgb, a) {
+  const p = parseRGB(cssRgb);
+  return `rgba(${p[0]},${p[1]},${p[2]},${a})`;
+}
+
 const rgbCache = new Map();
 function parseRGB(s) {
   let v = rgbCache.get(s);
@@ -94,6 +104,8 @@ export const THEMES = {
     lane: q('fddc'),
     haze: q('fbce'), fogDensity: 3.2,
     dark: 0,
+    orb: { x: 0.78, y: 0.15, r: 13, core: q('ffff'), halo: q('fffb') },
+    clouds: 5,
   },
   dusk: {
     name: 'DUSK',
@@ -104,6 +116,8 @@ export const THEMES = {
     lane: q('fdb8'),
     haze: q('c855'), fogDensity: 4.0,
     dark: 0.22,
+    orb: { x: 0.31, y: 0.34, r: 19, core: q('ffb5'), halo: q('fd51') },
+    clouds: 6,
   },
   night: {
     name: 'NIGHT',
@@ -114,6 +128,8 @@ export const THEMES = {
     lane: q('e999'),
     haze: q('2112'), fogDensity: 6.5,
     dark: 0.52,
+    orb: { x: 0.17, y: 0.13, r: 10, core: q('feee'), halo: q('787a') },
+    clouds: 2,
   },
   fog: {
     name: 'FOG',
@@ -124,6 +140,8 @@ export const THEMES = {
     lane: q('feee'),
     haze: q('cbbb'), fogDensity: 11.0,
     dark: 0.10,
+    orb: null,
+    clouds: 0,
   },
   rust: {
     name: 'RUST',
@@ -134,6 +152,8 @@ export const THEMES = {
     lane: q('fdc9'),
     haze: q('a731'), fogDensity: 5.0,
     dark: 0.18,
+    orb: { x: 0.64, y: 0.21, r: 15, core: q('ffc5'), halo: q('e841') },
+    clouds: 4,
   },
   snow: {
     name: 'SNOW',
@@ -144,6 +164,8 @@ export const THEMES = {
     lane: q('feee'),
     haze: q('deee'), fogDensity: 8.0,
     dark: 0.06,
+    orb: { x: 0.72, y: 0.17, r: 12, core: q('feee'), halo: q('cdde') },
+    clouds: 7,
   },
 };
 

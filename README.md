@@ -114,6 +114,11 @@ one. Measured end to end: stage 1 is 589 segments (~13s) with 20 cars and no
 hazards; stage 50 is 2072 segments (~48s) with 358 cars, 32 mines and 14
 turrets.
 
+**Roadside delineator posts** line both shoulders at fixed spacing. They are
+the cheapest trick in the file: regularly spaced, they give the eye a
+metronome for speed, and after dark their reflectors are the first thing the
+headlights pick out.
+
 **After dark** the van throws real headlight beams, and every lamp in the world
 — car head- and tail-lights, streetlights, turret sensors, mines, fuel globes,
 billboard floods, the skyline's windows — is queued during the sprite pass and
@@ -182,6 +187,12 @@ done about them here:
   run on `fuel <= 0`, ignoring the second tank — one bad wreck killed you with
   a full reserve untouched. Ending the run is now solely `burn()`'s job, and
   there is a regression test for it.
+- **A halo that fades to a colour instead of to nothing.** The sun's glow
+  ended on the flat sky colour, which over a *banded* sky painted a visible
+  square around it. Gradients over anything non-uniform have to fade to
+  transparent.
+- **Clouds as rectangles.** A cloud drawn as one filled box reads as a brick
+  floating in the sky. They are stacked tapering spans now, lit at the crown.
 - **A road that reads as a treadmill.** Long straights get patched asphalt,
   expansion joints on a 12-segment cast and the occasional set of skid marks,
   so the eye has irregular features to measure speed against. Narrow bridge
@@ -189,8 +200,8 @@ done about them here:
   shoulder has run out.
 
 Measured at 640×480 on the last stage with maximum traffic and repeated cruise
-missiles: median frame 16.7 ms, p95 17.2 ms, worst 23.1 ms, peak 25 cars and
-197 particles live.
+missiles: median frame 16.7 ms, p95 17.3 ms, worst 18.0 ms, peak 25 cars and
+191 particles live.
 
 ## The van
 
@@ -211,10 +222,19 @@ the light look like it is leaking out from underneath.
 
 They also **narrow** with distance. In world space a beam splays outward, but
 on screen perspective shrinks the far field much faster than the beam spreads,
-so the lit patch of road has to converge exactly as the road does — a beam
-that widens up the screen reads as pointed at the sky. Each beam is built from
-wide-at-the-van to narrow-at-the-vanishing-point, and it tracks the vanishing
-point the road pass recorded, so the light sweeps round a bend with the tarmac.
+so the lit patch of road has to converge exactly as the road does — a shape
+that widens up the screen reads as pointed at the sky. The throw is three
+tapering corridors stacked from a merged pool at the bumper to a point most of
+the way to the vanishing point: a wide soft spill, a defined main beam, and a
+hot core. Three passes is what gives it a beam *edge* rather than a flat wedge.
+All of it tracks the vanishing point the road pass recorded, so the light
+sweeps round a bend with the tarmac.
+
+On screen the van also shifts slightly **into** the direction you steer — a
+chase camera lagging a turning car — while drifting toward the *outside* of a
+corner, which is where cornering load actually puts it. Those are opposite
+signs, and having the first one backwards is very obvious once you look for
+it.
 
 ## The city
 

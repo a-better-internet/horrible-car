@@ -14,7 +14,7 @@
 
 import * as K from './config.js';
 import { project, DECO } from './road.js';
-import { THEMES, UI, mix, cssa } from './palette.js';
+import { THEMES, UI, mix, cssa, withAlpha } from './palette.js';
 import { SPR } from './sprites.js';
 import { skylineFor, TILE_W, TILE_H } from './skyline.js';
 import { clamp, lerp, exponentialFog } from './util.js';
@@ -205,6 +205,60 @@ export class Renderer {
       ctx.fillStyle = `rgba(90,190,255,${clamp(a, 0, 0.2)})`;
       ctx.fillRect(0, 0, W, H);
     }
+
+    this._drawSpeedStreaks(g);
+    this._drawVignette();
+  }
+
+  /**
+   * Motion streaks at high speed: short strokes flying outward from the
+   * vanishing point.  Only above ~70% of top speed, so they read as an event
+   * rather than as permanent screen dirt.
+   */
+  _drawSpeedStreaks(g) {
+    const pct = g.speed / K.MAX_SPEED;
+    if (pct < 0.70) return;
+    const ctx = this.ctx;
+    const intensity = (pct - 0.70) / 0.30;
+    const vx = this.vanishX;
+    const vy = this.vanishY;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,255,255,${(0.05 + intensity * 0.13).toFixed(3)})`;
+    ctx.lineWidth = R;
+    ctx.beginPath();
+    for (let i = 0; i < 14; i++) {
+      // Deterministic angles, animated outward, so they do not shimmer.
+      const ang = (i / 14) * Math.PI * 2 + i * 0.7;
+      const phase = ((g.time * (2 + intensity * 3) + i * 0.37) % 1);
+      const r0 = 0.25 + phase * 0.85;
+      const r1 = r0 + 0.10 + intensity * 0.12;
+      const scale = Math.max(W, H);
+      ctx.moveTo(vx + Math.cos(ang) * r0 * scale, vy + Math.sin(ang) * r0 * scale * 0.7);
+      ctx.lineTo(vx + Math.cos(ang) * r1 * scale, vy + Math.sin(ang) * r1 * scale * 0.7);
+    }
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Corner darkening, baked once.  A radial gradient rebuilt every frame over
+   * the whole buffer is a surprisingly large cost for something that never
+   * changes.
+   */
+  _drawVignette() {
+    if (!this._vignette) {
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const vc = c.getContext('2d');
+      const grad = vc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34,
+        W / 2, H / 2, Math.max(W, H) * 0.78);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.34)');
+      vc.fillStyle = grad;
+      vc.fillRect(0, 0, W, H);
+      this._vignette = c;
+    }
+    this.ctx.drawImage(this._vignette, 0, 0);
   }
 
   // ------------------------------------------------------------------ sky
@@ -229,6 +283,74 @@ export class Renderer {
     for (let i = 0; i < bands; i++) {
       ctx.fillStyle = mix(theme.sky, theme.skyLow, i / (bands - 1));
       ctx.fillRect(0, Math.round((H * i) / bands), W, bandH);
+    }
+
+    // Sun or moon, with a soft halo.  Drawn before the clouds so they can
+    // pass in front of it.
+    if (theme.orb) {
+      const ox = Math.round(W * theme.orb.x);
+      const oy = Math.round(H * theme.orb.y);
+      const rad = theme.orb.r * R;
+      // The halo must fade to TRANSPARENT, not to the sky colour: the sky is
+      // banded, so a gradient ending on one flat colour paints a visible
+      // square wherever the band underneath differs.
+      const halo = ctx.createRadialGradient(ox, oy, rad * 0.7, ox, oy, rad * 4.6);
+      halo.addColorStop(0, withAlpha(theme.orb.halo, 0.75));
+      halo.addColorStop(0.35, withAlpha(theme.orb.halo, 0.30));
+      halo.addColorStop(1, withAlpha(theme.orb.halo, 0));
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(ox, oy, rad * 4.6, 0, Math.PI * 2);
+      ctx.fill();
+      // Chunky disc from horizontal spans, to stay in keeping with the rest.
+      ctx.fillStyle = theme.orb.core;
+      for (let y = -rad; y <= rad; y++) {
+        const hw = Math.round(Math.sqrt(Math.max(0, rad * rad - y * y)));
+        ctx.fillRect(ox - hw, oy + y, hw * 2, 1);
+      }
+      // A bite out of the moon.
+      if (theme.dark > 0.4) {
+        ctx.fillStyle = theme.sky;
+        for (let y = -rad; y <= rad; y++) {
+          const hw = Math.round(Math.sqrt(Math.max(0, rad * rad - y * y)));
+          ctx.fillRect(ox - hw + rad * 0.75, oy + y - rad * 0.25, hw * 2, 1);
+        }
+      }
+    }
+
+    // Clouds.
+    //
+    // Stacked, tapering spans rather than plain rectangles: a cloud drawn as
+    // one filled box reads as a brick floating in the sky, which at dusk is
+    // extremely obvious.  Each is a few rows that narrow toward the top, with
+    // a lit crown and a shaded base, at low alpha so they sit in the sky
+    // rather than on top of it.
+    if (theme.clouds > 0) {
+      const span = W * 2;
+      const drift = ((this.skyOffset * 0.16) % span + span) % span;
+      const body = mix(theme.sky, theme.skyLow, 0.60);
+      const crown = mix(theme.sky, UI.white, theme.dark > 0.3 ? 0.05 : 0.34);
+      for (let i = 0; i < theme.clouds; i++) {
+        const seed = i * 9176 + 311;
+        const cw = (46 + (seed % 64)) * R;
+        const rows = 4 + (seed % 3);
+        const rowH = 3 * R;
+        // Keep clear of the HUD strip and stay above the horizon.
+        const cy = Math.round(H * 0.09 + ((seed >> 4) % 20) * R);
+        let cx = ((seed % span) - drift) % span;
+        if (cx < -cw) cx += span;
+
+        for (let rIdx = 0; rIdx < rows; rIdx++) {
+          const t = rIdx / (rows - 1);          // 0 at the base, 1 at the crown
+          const w2 = cw * (1 - t * 0.62);
+          const off = (cw - w2) * (0.35 + ((seed >> (rIdx + 2)) % 5) / 12);
+          ctx.globalAlpha = 0.20 + (1 - t) * 0.16;
+          ctx.fillStyle = rIdx >= rows - 2 ? crown : body;
+          ctx.fillRect(Math.round(cx + off), Math.round(cy - rIdx * rowH),
+            Math.round(w2), rowH + 1);
+        }
+        ctx.globalAlpha = 1;
+      }
     }
 
     // Stars go in before the road, so the road occludes the ones that should
@@ -445,6 +567,18 @@ export class Renderer {
     const srcH = Math.max(1, Math.round(spr.h * (1 - clipH / destH)));
     const drawH = destH - clipH;
 
+    // Contact shadow.  Without one, traffic looks pasted onto the road
+    // instead of standing on it.
+    if (spr.shadow && yWorld === 0 && destW > 6) {
+      const sw = destW * spr.shadow;
+      const sh = Math.max(1, Math.round(destH * 0.055));
+      ctx.globalAlpha = clamp(0.42 * fog, 0, 0.42);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(Math.round(destX + (destW - sw) / 2), Math.round(p.y - sh),
+        Math.round(sw), sh * 2);
+      ctx.globalAlpha = 1;
+    }
+
     // Distance fade is done with alpha, not by washing a haze rectangle over
     // the sprite: the sprite's bounding box is mostly transparent, so a wash
     // would paint a visible square halo around every distant tree.  The road
@@ -606,10 +740,15 @@ export class Renderer {
     const groundY = Math.round(K.PLAYER_GROUND_Y + bounce);
     const destY = groundY - destH;
 
-    // The camera tracks playerX, so the van is always horizontally centred;
-    // the only lateral movement is a small visual lean into the corner.
-    const lean = Math.round((-seg.curve * 1.1 - g.steerVisual * 2.2) * R);
-    const destX = Math.round(W / 2 - destW / 2) + lean;
+    // The camera tracks playerX, so the van is always horizontally centred.
+    // Two small offsets on top of that:
+    //   - it slides INTO the direction you are steering, because that is what
+    //     a chase camera lagging behind a turning car looks like;
+    //   - and it drifts toward the OUTSIDE of a corner, which is where
+    //     cornering load actually pushes it.
+    const steerShift = g.steerVisual * 4.5;
+    const curveDrift = -seg.curve * 0.9;
+    const destX = Math.round(W / 2 - destW / 2) + Math.round((steerShift + curveDrift) * R);
 
     // Headlights, before the van so the beams read as coming from under it.
     if (theme.dark > 0.08) this._drawHeadlights(g, theme, destX, destW, destY, destH);
@@ -710,72 +849,82 @@ export class Renderer {
   }
 
   /**
-   * Headlight beams.
+   * Headlight throw.
    *
-   * Two things were wrong before, and they compound.
+   * Built to look like a real beam pattern photographed from behind the car:
+   * a single merged pool of light starting at the bumper and narrowing into a
+   * long corridor that runs most of the way to the vanishing point, brightest
+   * near the car and dying out at the far end.
    *
-   * First, the lamps are on the FRONT of the van, which from a chase camera
-   * is the end you cannot see: it is further away, so it projects higher up
-   * the screen.  Springing the beams from the rear bumper line makes the
-   * light look like it is leaking out from underneath.
+   * Two things this has to get right, both of which were wrong before:
    *
-   * Second -- and this is what made them read as aimed at the sky -- the
-   * cones widened with distance.  In world space a beam does splay outward,
-   * but on screen perspective shrinks everything far away far faster than the
-   * beam spreads, so the lit patch of road must NARROW toward the vanishing
-   * point exactly as the road does.  The beams are therefore built as
-   * quadrilaterals from wide-at-the-van to narrow-at-the-vanishing-point, and
-   * they track `vanishX`, so they sweep round a bend with the tarmac.
+   *   1. The lamps are on the FRONT of the van, which from a chase camera is
+   *      the end you cannot see.  Springing the light from the rear bumper
+   *      line makes it look like it is leaking out from underneath.
+   *   2. The lit patch has to NARROW with distance.  In world space a beam
+   *      splays outward, but on screen perspective shrinks the far field far
+   *      faster than the beam spreads, so the light must converge exactly as
+   *      the road does.  A shape that widens up the screen reads as aimed at
+   *      the sky.
+   *
+   * It is drawn in three passes -- a wide soft spill, a defined main beam, and
+   * a hot core -- which is what gives a beam edge instead of a flat wedge.
+   * All of it tracks `vanishX`, so the light sweeps round a bend with the
+   * tarmac rather than shining off into a field.
    */
   _drawHeadlights(g, theme, vanX, vanW, vanTop, vanH) {
     const ctx = this.ctx;
     const cx = vanX + vanW / 2;
     // Origin at the front axle line, masked by the van's own bodywork.
-    const originY = vanTop + vanH * 0.36;
-
-    // Aim at the road's vanishing point, but stop short of it: light does not
-    // actually reach the horizon, and a beam that touches it looks like fog.
+    const originY = vanTop + vanH * 0.34;
     const vanish = clamp(this.vanishY, 0, originY);
-    const throwFrac = 0.72;
-    const farY = originY - (originY - vanish) * throwFrac;
-    const farX = cx + (this.vanishX - cx) * throwFrac;
+    const span = originY - vanish;
+    if (span < 8) return;
 
-    const strength = 0.20 + theme.dark * 0.78;
-    const flicker = 1 - Math.random() * 0.04;
+    const strength = 0.16 + theme.dark * 0.72;
+    const flicker = 1 - Math.random() * 0.035;
 
-    ctx.globalCompositeOperation = 'lighter';
-
-    for (const side of [-1, 1]) {
-      const lx = cx + side * vanW * 0.34;
-      // Wide where the road is wide, narrow where it converges.
-      const nearHalf = vanW * 0.52;
-      const farHalf = vanW * 0.11;
-
+    /**
+     * One tapering corridor from the van to `reach` of the way to the
+     * vanishing point.  `nearW`/`farW` are half-widths in van-widths.
+     */
+    const corridor = (nearW, farW, reach, alpha, tint) => {
+      const farY = originY - span * reach;
+      const farX = cx + (this.vanishX - cx) * reach;
       const grad = ctx.createLinearGradient(0, originY, 0, farY);
-      grad.addColorStop(0, `rgba(255,244,196,${(strength * flicker).toFixed(3)})`);
-      grad.addColorStop(0.30, `rgba(255,240,180,${(strength * 0.70).toFixed(3)})`);
-      grad.addColorStop(1, 'rgba(255,240,180,0)');
+      grad.addColorStop(0, `rgba(${tint},${(alpha * flicker).toFixed(3)})`);
+      grad.addColorStop(0.22, `rgba(${tint},${(alpha * 0.82).toFixed(3)})`);
+      grad.addColorStop(0.62, `rgba(${tint},${(alpha * 0.34).toFixed(3)})`);
+      grad.addColorStop(1, `rgba(${tint},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(lx - nearHalf, originY);
-      ctx.lineTo(lx + nearHalf, originY);
-      ctx.lineTo(farX + side * vanW * 0.10 + farHalf, farY);
-      ctx.lineTo(farX + side * vanW * 0.10 - farHalf, farY);
+      ctx.moveTo(cx - vanW * nearW, originY);
+      ctx.lineTo(cx + vanW * nearW, originY);
+      ctx.lineTo(farX + vanW * farW, farY);
+      ctx.lineTo(farX - vanW * farW, farY);
       ctx.closePath();
       ctx.fill();
-    }
+    };
 
-    // Hot pool of light on the tarmac immediately in front of the bumper.
-    const poolTop = originY - (originY - farY) * 0.28;
+    ctx.globalCompositeOperation = 'lighter';
+    // Soft spill either side of the beam.
+    corridor(1.35, 0.16, 0.60, strength * 0.30, '255,238,178');
+    // The beam proper: a long, defined corridor almost to the horizon.
+    corridor(0.86, 0.075, 0.86, strength * 0.62, '255,243,196');
+    // Hot core close to the car, where the two lamps overlap.
+    corridor(0.46, 0.035, 0.46, strength * 0.70, '255,250,224');
+
+    // The bright wash immediately in front of the bumper.
+    const poolTop = originY - span * 0.16;
     const pool = ctx.createLinearGradient(0, originY, 0, poolTop);
-    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.80).toFixed(3)})`);
-    pool.addColorStop(1, 'rgba(255,248,214,0)');
+    pool.addColorStop(0, `rgba(255,250,226,${(strength * 0.55).toFixed(3)})`);
+    pool.addColorStop(1, 'rgba(255,250,226,0)');
     ctx.fillStyle = pool;
     ctx.beginPath();
-    ctx.moveTo(cx - vanW * 0.92, originY);
-    ctx.lineTo(cx + vanW * 0.92, originY);
-    ctx.lineTo(cx + (farX - cx) * 0.28 + vanW * 0.50, poolTop);
-    ctx.lineTo(cx + (farX - cx) * 0.28 - vanW * 0.50, poolTop);
+    ctx.moveTo(cx - vanW * 1.45, originY);
+    ctx.lineTo(cx + vanW * 1.45, originY);
+    ctx.lineTo(cx + vanW * 0.95, poolTop);
+    ctx.lineTo(cx - vanW * 0.95, poolTop);
     ctx.closePath();
     ctx.fill();
 

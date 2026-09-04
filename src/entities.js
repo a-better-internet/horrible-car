@@ -246,6 +246,19 @@ export function populateTrack(track, stage, rng) {
     });
   }
 
+  // ---- delineator posts ------------------------------------------------
+  // Both shoulders, evenly spaced.  Regular spacing is the point: they are a
+  // metronome for speed, and at night their reflectors are the first thing
+  // the headlights find.
+  for (let n = 8; n < segs.length - 4; n += 11) {
+    for (const side of [-1, 1]) {
+      add(n, {
+        kind: 'prop', sprite: side > 0 ? 'postR' : 'postL', x: side * 1.10,
+        w: SPR.postL.worldW, solid: false, hp: 0, dead: false,
+      });
+    }
+  }
+
   // ---- low growth ------------------------------------------------------
   // A second, much denser pass of small vegetation hugging the shoulder.
   // Big trees alone leave the verge looking mown; grass and scrub right at

@@ -57,12 +57,12 @@ function makeCanvas(w, h) {
  * @param {(ctx: CanvasRenderingContext2D) => void} draw
  * @param {Array<object>} [lamps] fractional lamp rects for night lighting
  */
-function bake(w, h, worldW, draw, lamps = null) {
+function bake(w, h, worldW, draw, lamps = null, shadow = 0) {
   const canvas = makeCanvas(w, h);
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   draw(ctx);
-  return { canvas, w, h, worldW, aspect: h / w, lamps };
+  return { canvas, w, h, worldW, aspect: h / w, lamps, shadow };
 }
 
 const r = (ctx, x, y, w, h, color) => {
@@ -108,7 +108,8 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
  * visually even though the camera keeps the van centred.
  */
 function drawCaravan(ctx, W, H, lean) {
-  const bx = Math.round(lean * 3);
+  // Body rolls over its planted wheels, leading the roof slightly.
+  const bx = Math.round(lean * 4);
   const rx = Math.round(lean * 2);
   const mid = W >> 1;
 
@@ -667,6 +668,27 @@ function drawPylon(ctx, W, H) {
   rSym(ctx, W, 10, 31, 4, 6, C.greyLit);
 }
 
+/**
+ * Roadside delineator post.
+ *
+ * The little white posts with a reflector band that line every real highway
+ * shoulder.  They are the single cheapest way to make a road read as a road:
+ * regularly spaced, they give the eye a metronome for speed, and after dark
+ * their reflectors are the first thing the headlights pick out.
+ */
+function drawDelineator(ctx, W, H, amber) {
+  r(ctx, (W >> 1) - 3, 4, 6, H - 4, C.white);
+  r(ctx, (W >> 1) - 3, 4, 2, H - 4, C.greyLit);
+  r(ctx, (W >> 1) + 1, 4, 2, H - 4, C.grey);
+  r(ctx, (W >> 1) - 4, H - 4, 8, 4, C.greyDark);
+  const lens = amber ? C.tailAmber : C.tail;
+  r(ctx, (W >> 1) - 4, 9, 8, 9, C.greyDark);
+  r(ctx, (W >> 1) - 3, 10, 6, 7, lens);
+  r(ctx, (W >> 1) - 2, 11, 3, 3, C.white);
+  return [{ x: ((W >> 1) - 3) / W, y: 10 / H, w: 6 / W, h: 7 / H,
+    c: amber ? 'rgba(255,190,60,0.95)' : 'rgba(255,70,40,0.95)' }];
+}
+
 /** Cobra-head streetlight, for stages after dark. */
 function drawStreetlight(ctx, W, H, flip) {
   const px = flip ? W - 12 : 4;
@@ -841,7 +863,7 @@ export function buildSprites() {
 
   const car = (w, h, worldW, opts) => {
     let lamps = null;
-    const s = bake(w, h, worldW, (c) => { lamps = drawCar(c, w, h, opts); });
+    const s = bake(w, h, worldW, (c) => { lamps = drawCar(c, w, h, opts); }, null, 0.82);
     s.lamps = lamps;
     return s;
   };
@@ -861,23 +883,23 @@ export function buildSprites() {
   SPR.civicFront = car(68, 50, 0.35, { ...GREY, facing: 'front', shape: 'sedan' });
 
   let lamps = null;
-  SPR.cycle = bake(44, 62, 0.18, (c) => { lamps = drawCycle(c, 44, 62); });
+  SPR.cycle = bake(44, 62, 0.18, (c) => { lamps = drawCycle(c, 44, 62); }, null, 0.52);
   SPR.cycle.lamps = lamps;
-  SPR.turret = bake(56, 62, 0.30, (c) => { lamps = drawTurret(c, 56, 62); });
+  SPR.turret = bake(56, 62, 0.30, (c) => { lamps = drawTurret(c, 56, 62); }, null, 0.86);
   SPR.turret.lamps = lamps;
 
-  SPR.tree = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, false));
-  SPR.treeDark = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, true));
-  SPR.pine = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, false));
-  SPR.pineDark = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, true));
+  SPR.tree = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, false), null, 0.40);
+  SPR.treeDark = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, true), null, 0.40);
+  SPR.pine = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, false), null, 0.42);
+  SPR.pineDark = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, true), null, 0.42);
   SPR.deadTree = bake(72, 96, 0.56, (c) => drawDeadTree(c, 72, 96));
-  SPR.bush = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, false));
-  SPR.bushDark = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, true));
+  SPR.bush = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, false), null, 0.78);
+  SPR.bushDark = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, true), null, 0.78);
   SPR.grass = bake(24, 22, 0.18, (c) => drawGrass(c, 24, 22, false));
   SPR.grassDark = bake(24, 22, 0.18, (c) => drawGrass(c, 24, 22, true));
-  SPR.rock = bake(56, 48, 0.34, (c) => drawRock(c, 56, 48));
+  SPR.rock = bake(56, 48, 0.34, (c) => drawRock(c, 56, 48), null, 0.84);
   SPR.sign = bake(68, 68, 0.40, (c) => drawSign(c, 68, 68));
-  SPR.cone = bake(24, 32, 0.12, (c) => drawCone(c, 24, 32));
+  SPR.cone = bake(24, 32, 0.12, (c) => drawCone(c, 24, 32), null, 0.75);
   SPR.barrier = bake(80, 28, 0.44, (c) => drawBarrier(c, 80, 28));
   SPR.pylon = bake(48, 128, 0.34, (c) => drawPylon(c, 48, 128));
 
@@ -890,6 +912,12 @@ export function buildSprites() {
     SPR.billboards.push(s);
     SPR[`billboard${v}`] = s;
   }
+
+  let dl = null;
+  SPR.postL = bake(16, 46, 0.13, (c) => { dl = drawDelineator(c, 16, 46, false); });
+  SPR.postL.lamps = dl;
+  SPR.postR = bake(16, 46, 0.13, (c) => { dl = drawDelineator(c, 16, 46, true); });
+  SPR.postR.lamps = dl;
 
   SPR.streetlight = bake(96, 128, 1.05, (c) => { lamps = drawStreetlight(c, 96, 128, false); });
   SPR.streetlight.lamps = lamps;
@@ -911,7 +939,7 @@ export function buildSprites() {
     SPR[key].lamps = pl;
   }
 
-  SPR.mine = bake(40, 32, 0.20, (c) => { lamps = drawMine(c, 40, 32); });
+  SPR.mine = bake(40, 32, 0.20, (c) => { lamps = drawMine(c, 40, 32); }, null, 0.85);
   SPR.mine.lamps = lamps;
   SPR.plane = bake(128, 68, 1.30, (c) => { lamps = drawPlane(c, 128, 68); });
   SPR.plane.lamps = lamps;
