@@ -44,26 +44,30 @@ const PARTICLE_WORLD_W = 34;
 const SPRITE_NEAR_Z = K.PLAYER_Z * 0.85;
 
 /*
- * Headlight geometry, in ROAD space.
+ * Headlight geometry, in ROAD space.  Widths are road half-widths (1.0 = the
+ * painted edge), so they are directly comparable with VAN_WIDTH.
  *
- * Exported so the invariants below can be tested rather than merely intended.
+ * The near width is the one that matters and it has been wrong in both
+ * directions.  Far too wide (over a van width each side) and the light is a
+ * halo with no source.  But narrower than the van -- which is what an
+ * over-correction produced, and what a test then enforced -- is worse: the
+ * beam is completely hidden behind the van at its origin and only appears
+ * further up the road, so nothing connects the light to the car and it reads
+ * as a separate object floating on the tarmac.
  *
- * Widths are in road half-widths (1.0 = the painted edge).  A headlight is a
- * small lamp, so the beam must START narrower than the van -- an early
- * version had the near width above a full van width, which put the origin at
- * nearly three van widths across and made the light read as a glow leaking
- * out from under the car:
+ * Look at any photograph of a car at night from behind: the lit ground at the
+ * front bumper is a little WIDER than the car, so you can see it outboard of
+ * both front corners.  That overlap is the entire visual link between vehicle
+ * and light.  So:
  *
- *     2 * BEAM_NEAR_W  <  VAN_WIDTH
+ *     VAN_WIDTH  <=  2 * BEAM_NEAR_W  <=  2 * VAN_WIDTH
  *
- * It then opens out with distance the way a cone does.  BEAM_SPREAD is the
- * extra half-width added over the full range, so at the far end the beam is
- * BEAM_NEAR_W + BEAM_SPREAD across -- wider than the road, which is correct:
- * that far out a real low beam washes the shoulders too.
+ * From there it opens out with distance the way a cone does, and BEAM_SPREAD
+ * is the extra half-width gained over the full throw.
  */
-export const HEADLIGHT_RANGE = 58;    // segments of throw
-export const BEAM_NEAR_W = 0.17;
-export const BEAM_SPREAD = 1.15;
+export const HEADLIGHT_RANGE = 72;    // segments of throw
+export const BEAM_NEAR_W = 0.30;
+export const BEAM_SPREAD = 1.05;
 /** Belt-and-braces size cap for the pathological cases the near plane misses. */
 const SPRITE_MAX_W = W * 3;
 
@@ -909,17 +913,19 @@ export class Renderer {
     const ctx = this.ctx;
     const segs = g.track.segments;
 
-    // The van sits this many segments ahead of the camera; the lamps are on
-    // its nose, so start a segment further on and let the body mask the gap.
-    const fromN = Math.floor(K.PLAYER_Z / K.SEG_LENGTH) + 1;
+    // Start at the van's OWN segment, not past it.  The lamps are on the
+    // nose, but the light they throw lands on tarmac that begins beside the
+    // van -- skipping that first segment is what left a gap between the car
+    // and its own headlights.
+    const fromN = Math.floor(K.PLAYER_Z / K.SEG_LENGTH);
     const range = HEADLIGHT_RANGE;
-    const strength = 0.14 + theme.dark * 0.92;
+    const strength = clamp(theme.dark * 1.25, 0, 0.9);
+    if (strength < 0.04) return;
 
-    // Beam aim, in road half-widths from the centreline.  Following the
-    // road's own coordinates means the light stays in your lane through a
-    // corner; the small steer term lets it lead the wheel, which also sells
-    // the sense of steering the front of the van.
-    const aim = clamp(g.playerX + g.steerVisual * 0.34, -2, 2);
+    // Aim, in road half-widths from the centreline.  Working in the road's own
+    // coordinates keeps the light in your lane through a corner; the steer
+    // term lets it lead the wheel.
+    const aim = clamp(g.playerX + g.steerVisual * 0.30, -2, 2);
 
     ctx.globalCompositeOperation = 'lighter';
 
@@ -928,40 +934,51 @@ export class Renderer {
       if (!seg || !seg.visible) continue;
       const s1 = seg.p1.screen;
       const s2 = seg.p2.screen;
-      // Behind a crest, or degenerate.
       if (s1.y > seg.clip || s2.y >= s1.y) continue;
 
       const t0 = (n - fromN) / range;
       const t1 = (n + 1 - fromN) / range;
 
-      // Inverse-square-ish falloff, so the tarmac just ahead of the bumper is
-      // bright and the far end fades out instead of stopping dead.
-      const fall = 1 / (1 + (t0 * 3.1) * (t0 * 3.1));
-      if (fall < 0.02) break;
+      // Illuminance falls off with distance, and the whole thing is windowed
+      // to exactly zero at the far end.  Without the window the loop simply
+      // stops while the beam is still 9% lit, leaving a hard line across the
+      // road where the light ends.
+      const decay = 1 / (1 + (t0 * 3.0) * (t0 * 3.0));
+      const window = (1 - t0) * (1 - t0);
+      const a = strength * decay * window;
+      if (a < 0.004) break;
 
-      // Full-road-width pixel scale for each end of the segment.
       const f1 = s1.scale * K.ROAD_WIDTH * HALF_W;
       const f2 = s2.scale * K.ROAD_WIDTH * HALF_W;
+      const h1 = BEAM_NEAR_W + t0 * BEAM_SPREAD;
+      const h2 = BEAM_NEAR_W + t1 * BEAM_SPREAD;
 
-      const band = (spreadNear, spreadFar, alpha, tint) => {
-        const h1 = spreadNear + t0 * spreadFar;
-        const h2 = spreadNear + t1 * spreadFar;
-        ctx.fillStyle = `rgba(${tint},${(alpha).toFixed(4)})`;
-        polygon(ctx,
-          s1.x + f1 * (aim - h1), s1.y,
-          s1.x + f1 * (aim + h1), s1.y,
-          s2.x + f2 * (aim + h2), s2.y,
-          s2.x + f2 * (aim - h2), s2.y);
-      };
+      const x1L = s1.x + f1 * (aim - h1);
+      const x1R = s1.x + f1 * (aim + h1);
+      const x2L = s2.x + f2 * (aim - h2);
+      const x2R = s2.x + f2 * (aim + h2);
 
-      // Wide soft spill, then a tight bright core inside it.
-      band(BEAM_NEAR_W * 2.2, BEAM_SPREAD * 1.40, strength * fall * 0.26, '255,234,168');
-      band(BEAM_NEAR_W * 1.3, BEAM_SPREAD * 1.02, strength * fall * 0.34, '255,244,198');
-      band(BEAM_NEAR_W, BEAM_SPREAD * 0.72, strength * fall * 0.30, '255,251,228');
+      // A soft lateral profile, not a flat band.  Three nested constant-alpha
+      // polygons gave the beam three hard edges, which is what made it read as
+      // a geometric shape sitting on the road rather than as light.  One
+      // gradient per segment costs the same and has no edge at all.
+      const gl = Math.min(x1L, x2L);
+      const gr = Math.max(x1R, x2R);
+      if (gr - gl < 1) continue;
+      const grad = ctx.createLinearGradient(gl, 0, gr, 0);
+      grad.addColorStop(0, 'rgba(255,240,190,0)');
+      grad.addColorStop(0.18, `rgba(255,240,190,${(a * 0.30).toFixed(4)})`);
+      grad.addColorStop(0.40, `rgba(255,247,214,${(a * 0.88).toFixed(4)})`);
+      grad.addColorStop(0.60, `rgba(255,247,214,${(a * 0.88).toFixed(4)})`);
+      grad.addColorStop(0.82, `rgba(255,240,190,${(a * 0.30).toFixed(4)})`);
+      grad.addColorStop(1, 'rgba(255,240,190,0)');
+      ctx.fillStyle = grad;
+      polygon(ctx, x1L, s1.y, x1R, s1.y, x2R, s2.y, x2L, s2.y);
     }
 
     ctx.globalCompositeOperation = 'source-over';
   }
+
 }
 
 // ------------------------------------------------------------------ helpers

@@ -247,11 +247,23 @@ Drawn per segment, every hard part solves itself:
 
 Lateral extent grows with distance in *world* units — a real beam is a cone,
 roughly `w0 + d·tan(spread)` across — and perspective then does the right thing
-to it for free. Intensity falls off the way illuminance does, and three nested
-bands give the beam a soft edge. Tests pin `2·BEAM_NEAR_W < VAN_WIDTH`, because
-an early version had the near width above a full van width, which put the
-origin at nearly three van widths across and made the light read as a glow
-leaking out from under the car.
+to it for free. Intensity falls off the way illuminance does, windowed to
+exactly zero at the far end so the beam does not stop on a hard line, and each
+segment is filled with a horizontal gradient rather than flat bands: constant
+alpha gives light a visible edge, which is what makes it read as a geometric
+shape lying on the road instead of as light.
+
+The near width is the number that matters, and it was wrong in **both**
+directions before this. Far too wide (over a van width each side) makes a halo
+with no source. But *narrower than the van* is worse, and is what an
+over-correction produced — the beam is then completely hidden behind the van at
+its origin and only reappears further up the road, with nothing connecting the
+light to the car. Measured, it was 73.5px against an 82.2px van: 0.89×, fully
+occluded. Any photograph of a car at night from behind shows lit ground at the
+front bumper a little **wider** than the car, visible outboard of both front
+corners, and that overlap is the entire visual link between vehicle and light.
+The test now pins `VAN_WIDTH ≤ 2·BEAM_NEAR_W ≤ 2·VAN_WIDTH`; it previously
+asserted the opposite and so enforced the defect.
 
 ### You steer the nose, not the tail
 
