@@ -88,7 +88,7 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
 // ------------------------------------------------------------------ the van
 
 /**
- * A 1994 Dodge Caravan from behind, at 100x78.
+ * The Caravan's rear face, drawn flat.
  *
  * The shapes that identify a second-generation (1991-95) Caravan from this
  * angle, in rough order of how much they matter:
@@ -107,10 +107,9 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
  * `lean` in [-1,1] shifts the body over its wheels so hard steering reads
  * visually even though the camera keeps the van centred.
  */
-function drawCaravan(ctx, W, H, lean) {
-  // Body rolls over its planted wheels, leading the roof slightly.
-  const bx = Math.round(lean * 4);
-  const rx = Math.round(lean * 2);
+function drawCaravanRear(ctx, W, H) {
+  const bx = 0;
+  const rx = 0;
   const mid = W >> 1;
 
   // Explicit horizontal bands, top to bottom.  Deriving these from H made it
@@ -227,12 +226,113 @@ function drawCaravan(ctx, W, H, lean) {
   r(ctx, mid - 1 + rx, 0, 2, 2, C.chromeLit);
 }
 
-/** Where the van's lamps sit, for the night-lighting pass. */
-const VAN_LAMPS = [
-  { x: 0.03, y: 0.20, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
-  { x: 0.83, y: 0.20, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
-  { x: 0.41, y: 0.10, w: 0.18, h: 0.04, c: 'rgba(255,60,25,0.5)' },
-];
+/**
+ * The van's visible flank when it is yawed.
+ *
+ * `d` runs 0 at the edge touching the rear face to 1 at the far end, and the
+ * body tapers over that range: the far end is further from the camera, so it
+ * projects smaller.  That taper is the whole reason this reads as a car
+ * turning rather than as a rectangle glued to the side.
+ */
+function drawVanFlank(ctx, x0, w, H, dir) {
+  if (w <= 0) return;
+  const TOP = 6, BELT = 16, GLASS_B = 38, BODY_B = 57, SILL = 71;
+  const near = (i) => (dir > 0 ? x0 + i : x0 + w - 1 - i);
+
+  for (let i = 0; i < w; i++) {
+    const cx = near(i);
+    const d = w <= 1 ? 0 : i / (w - 1);
+    const shrink = d * 0.16;
+    const mid = (TOP + SILL) / 2;
+    const yTop = Math.round(TOP + (mid - TOP) * shrink);
+    const yBelt = Math.round(BELT + (mid - BELT) * shrink);
+    const yGlassB = Math.round(GLASS_B + (mid - GLASS_B) * shrink);
+    const yBodyB = Math.round(BODY_B - (BODY_B - mid) * shrink);
+    const ySill = Math.round(SILL - (SILL - mid) * shrink);
+
+    // Roof rail and the shoulder line catching the light.
+    r(ctx, cx, yTop, 1, 2, C.tanLit);
+    r(ctx, cx, yTop + 2, 1, yBelt - yTop - 2, C.tanMid);
+
+    // Side glass, in a dark rubber frame, with a reflection along the top.
+    r(ctx, cx, yBelt, 1, yGlassB - yBelt, C.black);
+    const gT = yBelt + 2;
+    const gB = yGlassB - 2;
+    r(ctx, cx, gT, 1, gB - gT, C.glass);
+    r(ctx, cx, gT, 1, 3, C.glassLit);
+    if (d > 0.45 && d < 0.60) r(ctx, cx, gT, 1, gB - gT, C.tanDark);  // B-pillar
+
+    // Body panel, its crease, and the shaded rocker below.
+    r(ctx, cx, yGlassB, 1, yBodyB - yGlassB, C.tanDark);
+    r(ctx, cx, yGlassB + 1, 1, 2, C.tanMid);
+    r(ctx, cx, yGlassB + 8, 1, 1, C.tanShadow);
+    r(ctx, cx, yBodyB, 1, ySill - yBodyB, C.tanShadow);
+  }
+
+  // Rear side-marker lamp on the corner nearest the camera.
+  r(ctx, near(0), 41, Math.min(2, w), 6, C.tailAmber);
+
+  // Fuel filler flap, a couple of pixels along.
+  if (w > 6) r(ctx, near(4), 44, 3, 5, C.tanMid);
+
+  // Rear wheel under its arch, at the near end of the flank.
+  const ww = Math.min(w, 10);
+  const wx = dir > 0 ? x0 : x0 + w - ww;
+  r(ctx, wx, 61, ww, 3, C.tanShadow);          // arch lip
+  r(ctx, wx, 64, ww, 16, C.tyreDark);
+  r(ctx, wx, 66, ww, 12, C.tyre);
+  r(ctx, wx + (dir > 0 ? 0 : 1), 69, Math.max(1, ww - 2), 6, C.greyDark);
+  r(ctx, wx + (dir > 0 ? 1 : 2), 70, Math.max(1, ww - 4), 4, C.chromeDark);
+}
+
+/**
+ * Compose one steering frame.
+ *
+ * `turn` in [-1,1] is the wheel.  Turning right points the nose right, which
+ * swings the tail you are looking at to the LEFT and brings the van's RIGHT
+ * flank into view alongside it -- so the flank goes on the right of the rear
+ * face and the face slides left.  (Check it with a toy car: nose east, you
+ * standing south, and the side facing you is the right one.)
+ *
+ * The rear face is also squeezed horizontally as it yaws, which is the
+ * foreshortening you would actually see.  Together those two cues are what
+ * make it feel like you are steering the front of the van instead of dragging
+ * it round by the back.
+ */
+function composeVanFrame(W, H, turn) {
+  const face = makeCanvas(W, H);
+  const fctx = face.getContext('2d');
+  fctx.imageSmoothingEnabled = false;
+  drawCaravanRear(fctx, W, H);
+
+  const out = makeCanvas(W, H);
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const sideW = Math.round(Math.abs(turn) * 13);
+  const faceW = W - sideW;
+  const dir = turn > 0 ? 1 : -1;
+  const faceX = turn > 0 ? 0 : sideW;
+
+  if (sideW > 0) drawVanFlank(ctx, turn > 0 ? faceW : 0, sideW, H, dir);
+  ctx.drawImage(face, 0, 0, W, H, faceX, 0, faceW, H);
+
+  // Lamp rectangles follow the squeezed face, so the tail-light glow at night
+  // stays on the tail-lights.
+  const lamp = (lx, lw, ly, lh, c) => ({
+    x: (faceX + (lx / W) * faceW) / W,
+    y: ly / H,
+    w: ((lw / W) * faceW) / W,
+    h: lh / H,
+    c,
+  });
+  const lamps = [
+    lamp(3, 12, 16, 41, 'rgba(255,70,30,0.55)'),
+    lamp(W - 15, 12, 16, 41, 'rgba(255,70,30,0.55)'),
+    lamp(W * 0.41, W * 0.18, 8, 3, 'rgba(255,60,25,0.5)'),
+  ];
+  return { canvas: out, lamps };
+}
 
 // ------------------------------------------------------------- generic cars
 
@@ -855,10 +955,15 @@ export function buildSprites() {
   built = true;
 
   // Player: five lean frames so hard steering reads on screen.
+  // Five yaw frames from full left lock to full right lock.
   SPR.van = [];
   for (let i = 0; i < 5; i++) {
-    const lean = (i - 2) / 2;
-    SPR.van.push(bake(88, 82, 0.38, (ctx) => drawCaravan(ctx, 88, 82, lean), VAN_LAMPS));
+    const turn = (i - 2) / 2;
+    const f = composeVanFrame(88, 82, turn);
+    SPR.van.push({
+      canvas: f.canvas, w: 88, h: 82, worldW: 0.38, aspect: 82 / 88,
+      lamps: f.lamps, shadow: 0,
+    });
   }
 
   const car = (w, h, worldW, opts) => {

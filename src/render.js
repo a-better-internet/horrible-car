@@ -44,25 +44,26 @@ const PARTICLE_WORLD_W = 34;
 const SPRITE_NEAR_Z = K.PLAYER_Z * 0.85;
 
 /*
- * Headlight beam geometry.
+ * Headlight geometry, in ROAD space.
  *
- * Exported so the invariant below can be tested rather than merely intended.
+ * Exported so the invariants below can be tested rather than merely intended.
  *
- * LAMP_X is the lamp's offset from the van's centreline, and each control
- * point is [reach, halfWidth] -- reach as a fraction of the distance to the
- * vanishing point, halfWidth in van-widths.  A headlight is a small lamp, so
- * the beams MUST be narrower than the van where they start:
+ * Widths are in road half-widths (1.0 = the painted edge).  A headlight is a
+ * small lamp, so the beam must START narrower than the van -- an early
+ * version had the near width above a full van width, which put the origin at
+ * nearly three van widths across and made the light read as a glow leaking
+ * out from under the car:
  *
- *     2 * (LAMP_X + controls[0][1])  <  1 van width
+ *     2 * BEAM_NEAR_W  <  VAN_WIDTH
  *
- * Break that and the light reads as a glow leaking out from under the car
- * rather than as two beams.  They flare wide a fifth of the way out, onto
- * ground that genuinely is wider than the car, then taper with the road.
+ * It then opens out with distance the way a cone does.  BEAM_SPREAD is the
+ * extra half-width added over the full range, so at the far end the beam is
+ * BEAM_NEAR_W + BEAM_SPREAD across -- wider than the road, which is correct:
+ * that far out a real low beam washes the shoulders too.
  */
-export const LAMP_X = 0.32;
-export const BEAM_SPILL = [[0, 0.13], [0.20, 0.78], [0.48, 0.50], [0.78, 0.23], [0.95, 0.10]];
-export const BEAM_MAIN = [[0, 0.09], [0.18, 0.50], [0.45, 0.33], [0.74, 0.16], [0.92, 0.07]];
-export const BEAM_CORE = [[0, 0.06], [0.14, 0.28], [0.38, 0.17], [0.62, 0.07]];
+export const HEADLIGHT_RANGE = 58;    // segments of throw
+export const BEAM_NEAR_W = 0.17;
+export const BEAM_SPREAD = 1.15;
 /** Belt-and-braces size cap for the pathological cases the near plane misses. */
 const SPRITE_MAX_W = W * 3;
 
@@ -206,6 +207,9 @@ export class Renderer {
       // moonlit, and a pure-black wash just greys everything out.
       ctx.fillStyle = cssa(2, 0, 0, 4, theme.dark);
       ctx.fillRect(-32, -32, W + 64, H + 64);
+      // Headlights before the lamps, so a car caught in the beam is lit by it
+      // and still shows its own tail-lights on top.
+      if (theme.dark > 0.08) this._drawHeadlightWash(g, theme, base.index, drawn);
       this._flushLamps();
     }
 
@@ -763,16 +767,17 @@ export class Renderer {
 
     // The camera tracks playerX, so the van is always horizontally centred.
     // Two small offsets on top of that:
-    //   - it slides INTO the direction you are steering, because that is what
-    //     a chase camera lagging behind a turning car looks like;
+    //   - the tail swings AWAY from the steer.  You are steering the front
+    //     wheels: point the nose right and the back end comes left, which is
+    //     the end you are looking at.  Paired with the yaw frames (which put
+    //     the van's right flank into view when the nose goes right), this is
+    //     what makes it feel like driving the front of the van rather than
+    //     dragging it round by the back.
     //   - and it drifts toward the OUTSIDE of a corner, which is where
     //     cornering load actually pushes it.
-    const steerShift = g.steerVisual * 4.5;
+    const steerShift = -g.steerVisual * 3.4;
     const curveDrift = -seg.curve * 0.9;
     const destX = Math.round(W / 2 - destW / 2) + Math.round((steerShift + curveDrift) * R);
-
-    // Headlights, before the van so the beams read as coming from under it.
-    if (theme.dark > 0.08) this._drawHeadlights(g, theme, destX, destW, destY, destH);
 
     // Ground shadow, drawn flat and unrotated: a shadow that spins with a
     // wrecking van reads as a black wedge stuck to the bodywork.
@@ -870,86 +875,92 @@ export class Renderer {
   }
 
   /**
-   * Headlight throw.
+   * Headlights, lit in ROAD SPACE.
    *
-   * The shape is the whole problem, so it is worth being explicit about it.
+   * This is the part that was wrong for several attempts, so it is worth
+   * writing down why.
    *
-   * A headlight is a cone from a small lamp.  On the ground, its lit patch at
-   * distance `d` has half-width roughly `w0 + d*tan(spread)`.  Projected to
-   * screen that scales by 1/d, giving `w0/d + tan(spread)`: very wide close
-   * up (the `w0/d` term blows up), settling toward a constant angular width
-   * far away.  Combined with the road's own convergence, the beam therefore
+   * The road is not a picture -- it is a list of segments, each already
+   * projected to screen this frame.  Anything that is supposed to LIE ON the
+   * road has to be drawn segment by segment using those same projections.
+   * Earlier versions drew the beam as one screen-space polygon, and no
+   * quadrilateral can follow a surface that curves, crests and dips: it
+   * always reads as a decal pasted over the picture rather than as light
+   * falling on tarmac.
    *
-   *   - starts NARROW, at the lamp, which is a small object inboard of the
-   *     bodywork -- it cannot be wider than the van at its origin;
-   *   - flares out fast over the first few car lengths, onto ground that is
-   *     genuinely wider than the car;
-   *   - then tapers away with the road toward the vanishing point.
+   * Drawn per segment, every hard problem solves itself:
+   *   - the beam bends with the road, because the segments do;
+   *   - it rides over crests and down into dips, for the same reason;
+   *   - it narrows in perspective exactly like the road, because it uses the
+   *     road's own scale;
+   *   - it is hidden behind a hill by the same `clip` line as everything else.
    *
-   * That is a lens shape, not a trapezoid, and it is why this is built from
-   * control points rather than from a single near/far width pair.  Earlier
-   * versions set the near half-width to more than a van width, which put the
-   * origin at nearly three van widths across and made the light read as a
-   * glow leaking out from under the car.
+   * Lateral extent grows with distance in WORLD units (a real beam is a cone,
+   * roughly `w0 + d*tan(spread)` across); perspective then does the right
+   * thing to it for free.  Intensity falls off with distance the way
+   * illuminance does, and two nested passes -- a wide dim spill and a narrow
+   * bright core -- give the beam a soft edge.
    *
-   * The lamps are also on the FRONT, which from a chase camera is the end you
-   * cannot see: further away, so higher up the screen and masked by the van's
-   * own body.
+   * Additive, as the standard technique for headlights requires, and drawn
+   * after the night wash so it brightens an already-dark scene rather than
+   * being dimmed along with it.
    */
-  _drawHeadlights(g, theme, vanX, vanW, vanTop, vanH) {
+  _drawHeadlightWash(g, theme, baseIndex, drawn) {
     const ctx = this.ctx;
-    const cx = vanX + vanW / 2;
-    const originY = vanTop + vanH * 0.34;
-    const vanish = clamp(this.vanishY, 0, originY);
-    const span = originY - vanish;
-    if (span < 8) return;
+    const segs = g.track.segments;
 
-    const strength = 0.16 + theme.dark * 0.74;
-    const flicker = 1 - Math.random() * 0.035;
+    // The van sits this many segments ahead of the camera; the lamps are on
+    // its nose, so start a segment further on and let the body mask the gap.
+    const fromN = Math.floor(K.PLAYER_Z / K.SEG_LENGTH) + 1;
+    const range = HEADLIGHT_RANGE;
+    const strength = 0.14 + theme.dark * 0.92;
 
-    /**
-     * One beam, as a polygon through [distance, half-width] control points.
-     * `reach` is the fraction of the way to the vanishing point; `halfW` is
-     * in van-widths.  Beam centres converge toward the vanishing point, so
-     * the light follows the tarmac round a bend.
-     */
-    const beam = (lampSide, ctrls, alpha, tint) => {
-      const lampX = cx + lampSide * vanW * LAMP_X;
-      const farY = originY - span * ctrls[ctrls.length - 1][0];
-      const grad = ctx.createLinearGradient(0, originY, 0, farY);
-      grad.addColorStop(0, `rgba(${tint},${(alpha * flicker).toFixed(3)})`);
-      grad.addColorStop(0.20, `rgba(${tint},${(alpha * 0.92).toFixed(3)})`);
-      grad.addColorStop(0.58, `rgba(${tint},${(alpha * 0.40).toFixed(3)})`);
-      grad.addColorStop(1, `rgba(${tint},0)`);
-      ctx.fillStyle = grad;
-
-      const px = (r, hw, sign) => {
-        const y = originY - span * r;
-        const c = lampX + (this.vanishX - lampX) * r;
-        return [c + sign * vanW * hw, y];
-      };
-
-      ctx.beginPath();
-      for (let i = 0; i < ctrls.length; i++) {
-        const [x, y] = px(ctrls[i][0], ctrls[i][1], -1);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      for (let i = ctrls.length - 1; i >= 0; i--) {
-        const [x, y] = px(ctrls[i][0], ctrls[i][1], 1);
-        ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
-    };
+    // Beam aim, in road half-widths from the centreline.  Following the
+    // road's own coordinates means the light stays in your lane through a
+    // corner; the small steer term lets it lead the wheel, which also sells
+    // the sense of steering the front of the van.
+    const aim = clamp(g.playerX + g.steerVisual * 0.34, -2, 2);
 
     ctx.globalCompositeOperation = 'lighter';
-    for (const side of [-1, 1]) {
-      beam(side, BEAM_SPILL, strength * 0.26, '255,238,178');
-      beam(side, BEAM_MAIN, strength * 0.52, '255,243,196');
-      beam(side, BEAM_CORE, strength * 0.62, '255,250,224');
+
+    for (let n = fromN; n < Math.min(fromN + range, drawn); n++) {
+      const seg = segs[baseIndex + n];
+      if (!seg || !seg.visible) continue;
+      const s1 = seg.p1.screen;
+      const s2 = seg.p2.screen;
+      // Behind a crest, or degenerate.
+      if (s1.y > seg.clip || s2.y >= s1.y) continue;
+
+      const t0 = (n - fromN) / range;
+      const t1 = (n + 1 - fromN) / range;
+
+      // Inverse-square-ish falloff, so the tarmac just ahead of the bumper is
+      // bright and the far end fades out instead of stopping dead.
+      const fall = 1 / (1 + (t0 * 3.1) * (t0 * 3.1));
+      if (fall < 0.02) break;
+
+      // Full-road-width pixel scale for each end of the segment.
+      const f1 = s1.scale * K.ROAD_WIDTH * HALF_W;
+      const f2 = s2.scale * K.ROAD_WIDTH * HALF_W;
+
+      const band = (spreadNear, spreadFar, alpha, tint) => {
+        const h1 = spreadNear + t0 * spreadFar;
+        const h2 = spreadNear + t1 * spreadFar;
+        ctx.fillStyle = `rgba(${tint},${(alpha).toFixed(4)})`;
+        polygon(ctx,
+          s1.x + f1 * (aim - h1), s1.y,
+          s1.x + f1 * (aim + h1), s1.y,
+          s2.x + f2 * (aim + h2), s2.y,
+          s2.x + f2 * (aim - h2), s2.y);
+      };
+
+      // Wide soft spill, then a tight bright core inside it.
+      band(BEAM_NEAR_W * 2.2, BEAM_SPREAD * 1.40, strength * fall * 0.26, '255,234,168');
+      band(BEAM_NEAR_W * 1.3, BEAM_SPREAD * 1.02, strength * fall * 0.34, '255,244,198');
+      band(BEAM_NEAR_W, BEAM_SPREAD * 0.72, strength * fall * 0.30, '255,251,228');
     }
+
     ctx.globalCompositeOperation = 'source-over';
-    void g;
   }
 }
 

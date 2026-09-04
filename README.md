@@ -200,8 +200,8 @@ done about them here:
   shoulder has run out.
 
 Measured at 640×480 on the last stage with maximum traffic and repeated cruise
-missiles: median frame 16.7 ms, p95 17.3 ms, worst 18.0 ms, peak 25 cars and
-191 particles live.
+missiles: median frame 16.7 ms, p95 17.0 ms, worst 19.7 ms, peak 26 cars and
+197 particles live.
 
 ## The van
 
@@ -220,33 +220,49 @@ cannot see. The beams therefore start about a third of the way up the sprite
 and are masked by the bodywork; springing them from the rear bumper line makes
 the light look like it is leaking out from underneath.
 
-The beam's **shape** is the part worth getting exactly right. A headlight is
-a cone from a small lamp: its lit patch at distance `d` has half-width about
-`w0 + d·tan(spread)`, and projecting that to screen scales it by `1/d`, giving
-`w0/d + tan(spread)`. So on screen the beam
+### Headlights are lit in road space
 
-- **starts narrow**, at the lamp — a small object inboard of the bodywork, so
-  the two beams together are narrower than the van where they begin;
-- **flares fast** over the first few car lengths, onto ground that genuinely
-  is wider than the car;
-- then **tapers** away with the road toward the vanishing point.
+This took several wrong attempts, so it is worth writing down.
 
-That is a lens shape, not a trapezoid, which is why it is built from
-`[reach, halfWidth]` control points rather than a single near/far pair, in
-three layers — a soft spill, a defined main beam and a hot core — because
-three passes are what give it a beam *edge* instead of a flat wedge. The
-geometry is exported and there is a test asserting
-`2·(LAMP_X + controls[0][1]) < 1` van width: an early version set the near
-half-width above a full van width, which put the origin at nearly three van
-widths across and made the light read as a glow leaking out from under the
-car. Beam centres converge on the vanishing point the road pass recorded, so
-the light sweeps round a bend with the tarmac.
+The road is not a picture — it is a list of segments, each already projected
+to screen this frame. **Anything meant to lie on the road has to be drawn
+segment by segment using those same projections.** Every earlier version drew
+the beam as one screen-space polygon, and no quadrilateral can follow a
+surface that curves, crests and dips: it always reads as a decal pasted over
+the picture rather than as light falling on tarmac. This is the standard shape
+of the problem in a segment racer — see
+[Lou's Pseudo 3D Page](https://www.extentofthejam.com/pseudo/) and
+[Jake Gordon's racer](https://jakesgordon.com/writing/javascript-racer-v1-straight/)
+— and the usual answer for headlights specifically is to light the ground in
+front of each lamp with
+[additive blending](https://www.gamedev.net/forums/topic/618802-headlight-glare-for-cars-in-racing-game/).
 
-On screen the van also shifts slightly **into** the direction you steer — a
-chase camera lagging a turning car — while drifting toward the *outside* of a
-corner, which is where cornering load actually puts it. Those are opposite
-signs, and having the first one backwards is very obvious once you look for
-it.
+Drawn per segment, every hard part solves itself:
+
+- the beam bends with the road, because the segments do;
+- it rides over crests and down into dips, for the same reason;
+- it narrows in perspective exactly like the road, because it uses the road's
+  own scale;
+- it is hidden behind a hill by the same `clip` line as everything else.
+
+Lateral extent grows with distance in *world* units — a real beam is a cone,
+roughly `w0 + d·tan(spread)` across — and perspective then does the right thing
+to it for free. Intensity falls off the way illuminance does, and three nested
+bands give the beam a soft edge. Tests pin `2·BEAM_NEAR_W < VAN_WIDTH`, because
+an early version had the near width above a full van width, which put the
+origin at nearly three van widths across and made the light read as a glow
+leaking out from under the car.
+
+### You steer the nose, not the tail
+
+The van does not merely slide. It has five yaw frames: turning the wheel right
+points the nose right, which swings the tail **left** — and the tail is the end
+you are looking at — while bringing the van's **right** flank into view
+alongside the rear face, which is also foreshortened as it turns. (Check it
+with a toy car: nose east, you standing south, and the side facing you is the
+right one.) Those cues together are what make it feel like driving the front of
+the van rather than dragging it round by the back. On top of that it drifts
+toward the outside of a corner, where cornering load actually puts it.
 
 ## The city
 
