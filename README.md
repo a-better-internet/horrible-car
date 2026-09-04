@@ -174,6 +174,14 @@ done about them here:
   recycle rather than grow. A 5-minute soak moves the heap 9.5 MB → 9.5 MB.
 - **Storage that throws.** `localStorage` is wrapped; private mode loses your
   high score rather than the game.
+- **Foliage floating above its own trunk.** Canopies are stacks of slabs whose
+  total height comes from a table, so trunks are drawn from where the canopy
+  actually ends rather than from a guessed offset. The deciduous tree, the
+  pine and the dead tree all had the same 12–15px gap.
+- **A death check that did not know about the reserve.** `crash()` ended the
+  run on `fuel <= 0`, ignoring the second tank — one bad wreck killed you with
+  a full reserve untouched. Ending the run is now solely `burn()`'s job, and
+  there is a regression test for it.
 - **A road that reads as a treadmill.** Long straights get patched asphalt,
   expansion joints on a 12-segment cast and the occasional set of skid marks,
   so the eye has irregular features to measure speed against. Narrow bridge
@@ -181,13 +189,14 @@ done about them here:
   shoulder has run out.
 
 Measured at 640×480 on the last stage with maximum traffic and repeated cruise
-missiles: median frame 16.7 ms, p95 17.0 ms, worst 18.4 ms, peak 30 cars and
-214 particles live.
+missiles: median frame 16.7 ms, p95 17.2 ms, worst 23.1 ms, peak 25 cars and
+197 particles live.
 
 ## The van
 
-It is a second-generation (1991–95) Dodge Caravan, and it is drawn from the
-shapes that actually identify one from behind: full-height vertical taillights
+It is a second-generation (1991–95) Dodge Caravan, drawn at 88×82 — a real
+one's rear is very nearly square, and an earlier 1.28:1 sprite read as far too
+wide. Its shapes are the ones that actually identify one from behind: full-height vertical taillights
 at the extreme corners running beltline to bumper, a wide rubber-framed
 liftgate window with a single centre wiper, a recessed licence plate low and
 central, a deep full-width bumper over a dark valance — and tyres that barely
@@ -197,8 +206,15 @@ a safari truck.
 
 Its headlights are on the front, which from a chase camera is the end you
 cannot see. The beams therefore start about a third of the way up the sprite
-and fan out past the bodywork; springing them from the rear bumper line makes
+and are masked by the bodywork; springing them from the rear bumper line makes
 the light look like it is leaking out from underneath.
+
+They also **narrow** with distance. In world space a beam splays outward, but
+on screen perspective shrinks the far field much faster than the beam spreads,
+so the lit patch of road has to converge exactly as the road does — a beam
+that widens up the screen reads as pointed at the sky. Each beam is built from
+wide-at-the-van to narrow-at-the-vanishing-point, and it tracks the vanishing
+point the road pass recorded, so the light sweeps round a bend with the tarmac.
 
 ## The city
 

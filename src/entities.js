@@ -174,13 +174,19 @@ export function makeTurret(x, z) {
  * same board again.
  */
 const SCENERY = [
-  { sprite: 'tree', solid: true, weight: 26 },
-  { sprite: 'treeDark', solid: true, weight: 20 },
-  { sprite: 'rock', solid: true, weight: 14 },
-  { sprite: 'sign', solid: true, weight: 8 },
-  { sprite: 'pylon', solid: false, weight: 9 },
+  { sprite: 'tree', solid: true, weight: 20 },
+  { sprite: 'treeDark', solid: true, weight: 14 },
+  { sprite: 'pine', solid: true, weight: 16 },
+  { sprite: 'deadTree', solid: true, weight: 5 },
+  { sprite: 'bush', solid: false, weight: 16 },
+  { sprite: 'rock', solid: true, weight: 9 },
+  { sprite: 'sign', solid: true, weight: 6 },
+  { sprite: 'pylon', solid: false, weight: 6 },
   { sprite: 'billboard', solid: false, weight: 2, variants: 6, minGap: 44 },
 ];
+
+/** Daylight sprite -> its shaded variant, for the dark themes. */
+const NIGHT_SWAP = { tree: 'treeDark', pine: 'pineDark', bush: 'bushDark', grass: 'grassDark' };
 
 const SCENERY_TOTAL = SCENERY.reduce((n, p) => n + p.weight, 0);
 
@@ -232,11 +238,29 @@ export function populateTrack(track, stage, rng) {
     let sprite = pick.variants ? `${pick.sprite}${rng.int(0, pick.variants - 1)}` : pick.sprite;
     // After dark, use the shaded foliage: a full-brightness summer tree at
     // midnight reads as a cutout pasted over the scene.
-    if (sprite === 'tree' && NIGHT_THEMES.has(track.theme)) sprite = 'treeDark';
+    if (NIGHT_THEMES.has(track.theme) && NIGHT_SWAP[sprite]) sprite = NIGHT_SWAP[sprite];
     add(n, {
       kind: 'prop', sprite, x: side * dist,
       w: SPR[sprite] ? SPR[sprite].worldW : 0.4,
       solid: pick.solid && dist < 2.05, hp: 0, dead: false,
+    });
+  }
+
+  // ---- low growth ------------------------------------------------------
+  // A second, much denser pass of small vegetation hugging the shoulder.
+  // Big trees alone leave the verge looking mown; grass and scrub right at
+  // the edge are what actually sell speed, because they are close enough to
+  // blur past.
+  const dark = NIGHT_THEMES.has(track.theme);
+  const grassSprite = dark ? 'grassDark' : 'grass';
+  const bushSprite = dark ? 'bushDark' : 'bush';
+  for (let n = 10; n < segs.length - 4; n += rng.int(1, 3)) {
+    const side = rng.chance(0.5) ? -1 : 1;
+    const isBush = rng.chance(0.22);
+    const sprite = isBush ? bushSprite : grassSprite;
+    add(n, {
+      kind: 'prop', sprite, x: side * rng.range(1.08, 1.9),
+      w: SPR[sprite].worldW, solid: false, hp: 0, dead: false,
     });
   }
 

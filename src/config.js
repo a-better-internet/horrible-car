@@ -108,7 +108,7 @@ export const FUEL_STAGE_BONUS = 26;   // topped up between stages
 
 // ---------------------------------------------------------------- dimensions
 // All widths are fractions of ROAD_WIDTH (the road half-width).
-export const VAN_WIDTH = 0.44;
+export const VAN_WIDTH = 0.38;
 export const VAN_LENGTH = 420;        // road units, for z-overlap tests
 
 // ---------------------------------------------------------------- weapons

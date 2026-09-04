@@ -108,119 +108,119 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
  * visually even though the camera keeps the van centred.
  */
 function drawCaravan(ctx, W, H, lean) {
-  const bx = Math.round(lean * 4);
+  const bx = Math.round(lean * 3);
   const rx = Math.round(lean * 2);
   const mid = W >> 1;
 
   // Explicit horizontal bands, top to bottom.  Deriving these from H made it
   // far too easy to land the licence plate on the bumper.
   const RACK = 2;
-  const ROOF = 5;
-  const BELT = 14;        // top of the taillights and the glass surround
-  const GLASS_T = 17;
-  const GLASS_B = 35;
-  const SURROUND_B = 38;
-  const HANDLE = 39;
-  const PLATE_T = 42;
-  const PLATE_B = 51;
-  const BUMPER_T = 52;
-  const BUMPER_B = 66;
-  const VALANCE_B = 72;
+  const ROOF = 6;
+  const BELT = 16;        // top of the taillights and the glass surround
+  const GLASS_T = 19;
+  const GLASS_B = 39;
+  const SURROUND_B = 42;
+  const HANDLE = 43;
+  const PLATE_T = 46;
+  const PLATE_B = 56;
+  const BUMPER_T = 57;
+  const BUMPER_B = 71;
+  const VALANCE_B = 77;
   const LIGHT_B = BUMPER_T;
 
   // ---- tyres -----------------------------------------------------------
   // Only the outer bottom corners show past the bodywork.  Drawing these as
   // big blocks is what used to make the van read as a safari truck.
-  for (const wx of [3, W - 15]) {
-    r(ctx, wx + 1, 60, 10, 17, C.tyreDark);
-    r(ctx, wx, 63, 12, 14, C.tyreDark);
-    r(ctx, wx + 1, 64, 10, 12, C.tyre);
-    r(ctx, wx + 2, 70, 8, 5, C.greyDark);
-    r(ctx, wx + 3, 71, 6, 3, C.chromeDark);
+  for (const wx of [3, W - 13]) {
+    r(ctx, wx + 1, 65, 8, 17, C.tyreDark);
+    r(ctx, wx, 68, 10, 14, C.tyreDark);
+    r(ctx, wx + 1, 69, 8, 12, C.tyre);
+    r(ctx, wx + 2, 75, 6, 5, C.greyDark);
+    r(ctx, wx + 3, 76, 4, 3, C.chromeDark);
   }
 
   // ---- valance and bumper ---------------------------------------------
   r(ctx, 8 + bx, BUMPER_B, W - 16, VALANCE_B - BUMPER_B, C.tanShadow);
-  r(ctx, 62 + bx, BUMPER_B + 2, 12, 4, C.chromeDark);   // exhaust cutout
-  r(ctx, 64 + bx, BUMPER_B + 3, 8, 2, C.black);
+  r(ctx, 54 + bx, BUMPER_B + 2, 11, 4, C.chromeDark);   // exhaust cutout
+  r(ctx, 56 + bx, BUMPER_B + 3, 7, 2, C.black);
 
   r(ctx, 1 + bx, BUMPER_T, W - 2, BUMPER_B - BUMPER_T, C.tanDark);
   r(ctx, 1 + bx, BUMPER_T, W - 2, 3, C.tanMid);         // top face
   r(ctx, 1 + bx, BUMPER_B - 3, W - 2, 3, C.tanShadow);
   r(ctx, 4 + bx, BUMPER_T + 6, W - 8, 4, C.chromeDark); // rub strip
   r(ctx, 4 + bx, BUMPER_T + 6, W - 8, 1, C.chrome);
-  rSym(ctx, W, 1 + bx, BUMPER_T, 5, BUMPER_B - BUMPER_T, C.tanShadow);
+  rSym(ctx, W, 1 + bx, BUMPER_T, 4, BUMPER_B - BUMPER_T, C.tanShadow);
 
   // ---- body ------------------------------------------------------------
-  r(ctx, 3 + bx, 12, W - 6, BUMPER_T - 12, C.tan);
-  r(ctx, 3 + bx, 12, W - 6, 3, C.tanLit);
-  rSym(ctx, W, 3 + bx, 12, 3, BUMPER_T - 12, C.tanMid);  // side radius
+  r(ctx, 3 + bx, 13, W - 6, BUMPER_T - 13, C.tan);
+  r(ctx, 3 + bx, 13, W - 6, 3, C.tanLit);
+  rSym(ctx, W, 3 + bx, 13, 3, BUMPER_T - 13, C.tanMid);  // side radius
   r(ctx, 3 + bx, BUMPER_T - 3, W - 6, 3, C.tanMid);
 
   // ---- roof, spoiler and rack -----------------------------------------
-  r(ctx, 9 + rx, ROOF, W - 18, 8, C.tan);
-  r(ctx, 9 + rx, ROOF, W - 18, 2, C.tanLit);
-  r(ctx, 7 + rx, 10, W - 14, 4, C.tanMid);               // spoiler lip
-  r(ctx, mid - 9 + rx, ROOF + 2, 18, 3, C.tailDeep);     // third brake light
-  r(ctx, mid - 8 + rx, ROOF + 3, 16, 1, C.tail);
-  r(ctx, 20 + rx, RACK, W - 40, 2, C.grey);              // low-profile rails
-  r(ctx, 20 + rx, RACK, W - 40, 1, C.greyLit);
-  rSym(ctx, W, 19 + rx, RACK + 1, 4, 3, C.greyDark);
+  r(ctx, 8 + rx, ROOF, W - 16, 9, C.tan);
+  r(ctx, 8 + rx, ROOF, W - 16, 2, C.tanLit);
+  r(ctx, 6 + rx, 11, W - 12, 4, C.tanMid);               // spoiler lip
+  r(ctx, mid - 8 + rx, ROOF + 2, 16, 3, C.tailDeep);     // third brake light
+  r(ctx, mid - 7 + rx, ROOF + 3, 14, 1, C.tail);
+  r(ctx, 18 + rx, RACK, W - 36, 2, C.grey);              // low-profile rails
+  r(ctx, 18 + rx, RACK, W - 36, 1, C.greyLit);
+  rSym(ctx, W, 17 + rx, RACK + 1, 4, 4, C.greyDark);
 
   // ---- liftgate glass --------------------------------------------------
-  r(ctx, 15 + bx, BELT, W - 30, SURROUND_B - BELT, C.black);   // rubber surround
-  r(ctx, 18 + bx, GLASS_T, W - 36, GLASS_B - GLASS_T, C.glass);
-  r(ctx, 19 + bx, GLASS_T + 1, W - 38, 5, C.glassLit);         // sky reflection
+  r(ctx, 14 + bx, BELT, W - 28, SURROUND_B - BELT, C.black);   // rubber surround
+  r(ctx, 17 + bx, GLASS_T, W - 34, GLASS_B - GLASS_T, C.glass);
+  r(ctx, 18 + bx, GLASS_T + 1, W - 36, 5, C.glassLit);         // sky reflection
   for (let i = 0; i < 5; i++) {
-    r(ctx, 21 + bx, GLASS_T + 8 + i * 3, W - 42, 1, C.glassDark); // defroster
+    r(ctx, 20 + bx, GLASS_T + 8 + i * 3, W - 40, 1, C.glassDark); // defroster
   }
-  r(ctx, 20 + bx, GLASS_B - 6, 12, 5, C.glassPale);            // smear
-  r(ctx, mid - 14 + bx, GLASS_B + 1, 28, 2, C.greyDark);       // wiper blade
-  r(ctx, mid - 14 + bx, GLASS_B - 3, 2, 5, C.greyDark);        // wiper arm
+  r(ctx, 19 + bx, GLASS_B - 6, 11, 5, C.glassPale);            // smear
+  r(ctx, mid - 12 + bx, GLASS_B + 1, 24, 2, C.greyDark);       // wiper blade
+  r(ctx, mid - 12 + bx, GLASS_B - 3, 2, 5, C.greyDark);        // wiper arm
   r(ctx, mid - 3 + bx, BELT - 2, 6, 3, C.greyDark);            // washer nozzle
 
   // ---- taillights ------------------------------------------------------
   // Corner to corner, beltline to bumper.  Amber turn on top, red brake
   // through the middle, clear reverse at the bottom.  Nothing else on the
   // road has lamps this tall.
-  for (const lx of [3, W - 17]) {
-    r(ctx, lx + bx, BELT, 14, LIGHT_B - BELT, C.tailDeep);
-    r(ctx, lx + 1 + bx, BELT + 1, 12, LIGHT_B - BELT - 2, C.tail);
-    r(ctx, lx + 1 + bx, BELT + 1, 12, 8, C.tailAmber);
-    r(ctx, lx + 1 + bx, BELT + 9, 12, 1, C.tailDeep);
-    r(ctx, lx + 1 + bx, LIGHT_B - 8, 12, 1, C.tailDeep);
-    r(ctx, lx + 1 + bx, LIGHT_B - 7, 12, 6, C.white);          // reverse lamp
-    r(ctx, lx + 3 + bx, BELT + 14, 4, 8, C.tailLit);           // lens highlight
-    r(ctx, lx + 6 + bx, BELT + 12, 1, LIGHT_B - BELT - 24, C.tailLit);
+  for (const lx of [3, W - 15]) {
+    r(ctx, lx + bx, BELT, 12, LIGHT_B - BELT, C.tailDeep);
+    r(ctx, lx + 1 + bx, BELT + 1, 10, LIGHT_B - BELT - 2, C.tail);
+    r(ctx, lx + 1 + bx, BELT + 1, 10, 8, C.tailAmber);
+    r(ctx, lx + 1 + bx, BELT + 9, 10, 1, C.tailDeep);
+    r(ctx, lx + 1 + bx, LIGHT_B - 9, 10, 1, C.tailDeep);
+    r(ctx, lx + 1 + bx, LIGHT_B - 8, 10, 7, C.white);          // reverse lamp
+    r(ctx, lx + 3 + bx, BELT + 14, 3, 8, C.tailLit);           // lens highlight
+    r(ctx, lx + 5 + bx, BELT + 12, 1, LIGHT_B - BELT - 25, C.tailLit);
   }
 
   // ---- liftgate furniture ---------------------------------------------
-  r(ctx, mid - 22 + bx, HANDLE, 44, 3, C.chrome);              // handle bar
-  r(ctx, mid - 22 + bx, HANDLE, 44, 1, C.chromeLit);
-  r(ctx, mid + 18 + bx, HANDLE + 1, 4, 3, C.greyDark);         // keyhole
+  r(ctx, mid - 19 + bx, HANDLE, 38, 3, C.chrome);              // handle bar
+  r(ctx, mid - 19 + bx, HANDLE, 38, 1, C.chromeLit);
+  r(ctx, mid + 15 + bx, HANDLE + 1, 4, 3, C.greyDark);         // keyhole
   r(ctx, mid - 6 + bx, PLATE_T - 2, 12, 2, C.greyLit);         // plate lamp
-  r(ctx, mid - 14 + bx, PLATE_T, 28, PLATE_B - PLATE_T, C.chromeDark);
-  r(ctx, mid - 13 + bx, PLATE_T + 1, 26, PLATE_B - PLATE_T - 2, C.white);
-  r(ctx, mid - 11 + bx, PLATE_T + 3, 22, PLATE_B - PLATE_T - 6, C.greyDark);
+  r(ctx, mid - 13 + bx, PLATE_T, 26, PLATE_B - PLATE_T, C.chromeDark);
+  r(ctx, mid - 12 + bx, PLATE_T + 1, 24, PLATE_B - PLATE_T - 2, C.white);
+  r(ctx, mid - 10 + bx, PLATE_T + 3, 20, PLATE_B - PLATE_T - 6, C.greyDark);
   for (let i = 0; i < 4; i++) {
-    r(ctx, mid - 9 + bx + i * 5, PLATE_T + 4, 3, PLATE_B - PLATE_T - 8, C.white);
+    r(ctx, mid - 8 + bx + i * 5, PLATE_T + 4, 3, PLATE_B - PLATE_T - 8, C.white);
   }
 
   // Badging: DODGE left of the plate, CARAVAN right.  Illegible, correct.
-  for (let i = 0; i < 4; i++) r(ctx, 21 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
-  for (let i = 0; i < 5; i++) r(ctx, W - 36 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
+  for (let i = 0; i < 4; i++) r(ctx, 18 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
+  for (let i = 0; i < 5; i++) r(ctx, W - 32 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
 
   // ---- rust ------------------------------------------------------------
   // Enough to date the thing; not so much that it reads as camouflage.
-  r(ctx, 5 + bx, BUMPER_T - 10, 9, 6, C.rust);
-  r(ctx, 6 + bx, BUMPER_T - 8, 5, 3, C.rustDark);
-  r(ctx, W - 18 + bx, BUMPER_T - 9, 6, 4, C.rustDark);
-  r(ctx, 11 + bx, BUMPER_B - 5, 5, 3, C.rustDark);
-  r(ctx, W - 26 + bx, BUMPER_T + 2, 4, 3, C.rust);
+  r(ctx, 4 + bx, BUMPER_T - 10, 8, 6, C.rust);
+  r(ctx, 5 + bx, BUMPER_T - 8, 5, 3, C.rustDark);
+  r(ctx, W - 16 + bx, BUMPER_T - 9, 6, 4, C.rustDark);
+  r(ctx, 10 + bx, BUMPER_B - 5, 5, 3, C.rustDark);
+  r(ctx, W - 24 + bx, BUMPER_T + 2, 4, 3, C.rust);
 
   // ---- the roof-mounted cannon.  Not factory. --------------------------
-  r(ctx, mid - 10 + rx, RACK, 20, 5, C.steelDark);             // mount plate
-  rSym(ctx, W, mid - 10 + rx, RACK, 3, 5, C.chromeDark);       // bolts
+  r(ctx, mid - 9 + rx, RACK, 18, 5, C.steelDark);              // mount plate
+  rSym(ctx, W, mid - 9 + rx, RACK, 3, 5, C.chromeDark);        // bolts
   r(ctx, mid - 5 + rx, 0, 10, 4, C.steel);
   r(ctx, mid - 3 + rx, 0, 6, 3, C.steelDark);
   r(ctx, mid - 1 + rx, 0, 2, 2, C.chromeLit);
@@ -228,9 +228,9 @@ function drawCaravan(ctx, W, H, lean) {
 
 /** Where the van's lamps sit, for the night-lighting pass. */
 const VAN_LAMPS = [
-  { x: 0.03, y: 0.18, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
-  { x: 0.83, y: 0.18, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
-  { x: 0.41, y: 0.09, w: 0.18, h: 0.04, c: 'rgba(255,60,25,0.5)' },
+  { x: 0.03, y: 0.20, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
+  { x: 0.83, y: 0.20, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
+  { x: 0.41, y: 0.10, w: 0.18, h: 0.04, c: 'rgba(255,60,25,0.5)' },
 ];
 
 // ------------------------------------------------------------- generic cars
@@ -349,6 +349,14 @@ function drawTurret(ctx, W, H) {
 
 // ------------------------------------------------------------------ scenery
 
+/**
+ * Deciduous tree.
+ *
+ * The canopy is a stack of slabs whose total height depends on the band
+ * table, so the trunk is drawn from wherever the canopy actually ends rather
+ * than from a guessed offset -- getting that wrong leaves the canopy floating
+ * a dozen pixels above its own trunk.
+ */
 function drawTree(ctx, W, H, dark) {
   const trunk = dark ? C.brownDark : C.brown;
   const trunkLit = dark ? C.brown : C.brownLit;
@@ -356,21 +364,157 @@ function drawTree(ctx, W, H, dark) {
   const leafLit = dark ? C.green : C.greenLit;
   const leafDark = C.greenDark;
 
-  r(ctx, (W >> 1) - 6, H - 26, 12, 26, trunk);
-  r(ctx, (W >> 1) - 6, H - 26, 4, 26, trunkLit);
-  r(ctx, (W >> 1) + 2, H - 26, 4, 26, C.brownDark);
-  r(ctx, (W >> 1) - 12, H - 4, 24, 4, trunk);            // root flare
-
-  // Canopy as stacked slabs, lighter at the top.
+  // Measure the canopy first.
   const bands = [[19, 9], [14, 11], [9, 13], [5, 14], [2, 15], [7, 12]];
+  let canopyBottom = 4;
+  for (const [, hh] of bands) canopyBottom += hh - 3;
+  canopyBottom += 3;
+
+  // Trunk runs from inside the canopy down to the ground.
+  const trunkTop = canopyBottom - 6;
+  const trunkH = H - trunkTop;
+  r(ctx, (W >> 1) - 6, trunkTop, 12, trunkH, trunk);
+  r(ctx, (W >> 1) - 6, trunkTop, 4, trunkH, trunkLit);
+  r(ctx, (W >> 1) + 2, trunkTop, 4, trunkH, C.brownDark);
+  // Bark texture and a root flare so it meets the ground rather than stopping.
+  for (let ty = trunkTop + 4; ty < H - 6; ty += 7) {
+    r(ctx, (W >> 1) - 4, ty, 3, 2, C.brownDark);
+  }
+  r(ctx, (W >> 1) - 11, H - 5, 22, 5, trunk);
+  r(ctx, (W >> 1) - 11, H - 5, 8, 3, trunkLit);
+  r(ctx, (W >> 1) + 4, H - 4, 7, 4, C.brownDark);
+
+  // Canopy over the top of it.
   let y = 4;
-  for (let i = 0; i < bands.length; i++) {
-    const [inset, hh] = bands[i];
+  for (const [inset, hh] of bands) {
     r(ctx, inset, y, W - inset * 2, hh, leaf);
     r(ctx, inset + 2, y, W - inset * 2 - 4, 3, leafLit);
     r(ctx, inset, y + hh - 3, W - inset * 2, 3, leafDark);
     y += hh - 3;
   }
+  // A couple of gaps so the silhouette is not a perfect stack of rectangles.
+  r(ctx, 6, 22, 5, 6, 'rgba(0,0,0,0)');
+}
+
+/**
+ * Conifer.  Western Pennsylvania has a lot of these.
+ *
+ * The trunk top is derived from where the lowest skirt actually ends, for the
+ * same reason as the deciduous tree: a hardcoded offset leaves the foliage
+ * hovering above its own trunk.
+ */
+function drawPine(ctx, W, H, dark) {
+  const trunk = dark ? C.brownDark : C.brown;
+  const leaf = dark ? C.greenDark : C.green;
+  const leafLit = dark ? C.green : C.greenLit;
+  const leafDark = C.greenDark;
+  const cx = W >> 1;
+
+  const skirts = [[0.28, 10], [0.46, 22], [0.68, 34], [0.92, 46]];
+
+  // Measure the foliage first.
+  let y = 4;
+  let foliageBottom = 0;
+  for (const [, hh] of skirts) {
+    foliageBottom = Math.max(foliageBottom, y + hh);
+    y += Math.round(hh * 0.52);
+  }
+
+  // Trunk from inside the lowest skirt down to the ground.
+  const trunkTop = foliageBottom - 8;
+  r(ctx, cx - 4, trunkTop, 8, H - trunkTop, trunk);
+  r(ctx, cx - 4, trunkTop, 3, H - trunkTop, C.brownDark);
+  r(ctx, cx - 9, H - 5, 18, 5, trunk);
+  r(ctx, cx + 2, H - 4, 7, 4, C.brownDark);
+
+  // Then the skirts over it, widest at the bottom.
+  y = 4;
+  for (const [wf, hh] of skirts) {
+    const half = Math.round((W * wf) / 2);
+    tri(ctx, cx - half, y + hh, cx + half, y + hh, cx, y, leaf);
+    tri(ctx, cx - half, y + hh, cx - half + 6, y + hh, cx, y + 4, leafLit);
+    r(ctx, cx - half, y + hh - 2, half * 2, 2, leafDark);
+    y += Math.round(hh * 0.52);
+  }
+}
+
+/** Bare tree, for the rust and winter stages. */
+function drawDeadTree(ctx, W, H) {
+  const wood = C.brownDark;
+  const woodLit = C.brown;
+  const cx = W >> 1;
+
+  // One continuous trunk from the crown to the ground, tapering as it rises.
+  for (let y = 6; y < H; y++) {
+    const t = (y - 6) / (H - 6);
+    const half = Math.max(2, Math.round(2 + t * 4));
+    r(ctx, cx - half, y, half * 2, 1, wood);
+    r(ctx, cx - half, y, Math.max(1, half - 1), 1, woodLit);
+  }
+  r(ctx, cx - 11, H - 5, 22, 5, wood);
+  r(ctx, cx + 3, H - 4, 8, 4, C.brownDark);
+
+  // Branches: forks alternating up the trunk, thinning as they go.
+  const limbs = [[-1, 46, 20, 12], [1, 38, 18, 11], [-1, 26, 13, 8], [1, 19, 11, 7],
+    [-1, 12, 7, 5]];
+  for (const [dir, at, len, rise] of limbs) {
+    for (let i = 0; i < len; i++) {
+      const th = i < len * 0.6 ? 3 : 2;
+      r(ctx, cx + dir * (2 + i), H - at - Math.round((i / len) * rise * 2), th, th, wood);
+    }
+  }
+}
+
+/**
+ * Low round shrub.
+ *
+ * Rows run top to bottom and widen as they go: parametrising the other way
+ * round builds an upside-down dome, which reads as a flat green pad rather
+ * than a bush.
+ */
+function drawBush(ctx, W, H, dark) {
+  const leaf = dark ? C.greenDark : C.green;
+  const leafLit = dark ? C.green : C.greenLit;
+  const leafDark = C.greenDark;
+  const cx = W >> 1;
+  const rad = Math.round(Math.min(W * 0.5, H * 0.78));
+  const base = H - 3;
+
+  for (let i = 0; i <= rad; i++) {
+    const yy = base - rad + i;
+    const t = 1 - i / rad;                       // 1 at the crown, 0 at the base
+    const halfw = Math.round(rad * Math.sqrt(Math.max(0, 1 - t * t)) * 1.15);
+    if (halfw <= 0) continue;
+    const shade = i < rad * 0.30 ? leafLit : i > rad * 0.80 ? leafDark : leaf;
+    r(ctx, cx - halfw, yy, halfw * 2, 1, shade);
+  }
+
+  // Two smaller lobes so the silhouette is not a single clean dome.
+  for (const [ox, oy, orad] of [[-rad * 0.72, -rad * 0.30, rad * 0.46],
+    [rad * 0.66, -rad * 0.20, rad * 0.40]]) {
+    for (let i = 0; i <= orad; i++) {
+      const t = 1 - i / orad;
+      const halfw = Math.round(orad * Math.sqrt(Math.max(0, 1 - t * t)) * 1.1);
+      if (halfw <= 0) continue;
+      r(ctx, cx + ox - halfw, base + oy - orad + i, halfw * 2, 1,
+        i < orad * 0.35 ? leaf : leafDark);
+    }
+  }
+
+  r(ctx, cx - rad, base, rad * 2, 3, leafDark);   // shaded underside
+}
+
+/** Tall grass / weeds, for the very edge of the shoulder. */
+function drawGrass(ctx, W, H, dark) {
+  const a = dark ? C.greenDark : C.green;
+  const b = dark ? C.green : C.greenLit;
+  const blades = [[2, 9], [5, 14], [8, 11], [11, 16], [14, 10], [17, 13], [20, 8]];
+  for (const [x, h] of blades) {
+    if (x >= W - 1) continue;
+    r(ctx, x, H - h, 2, h, x % 3 === 0 ? b : a);
+    r(ctx, x + (x % 2 ? 1 : -1), H - h - 3, 1, 4, a);
+  }
+  r(ctx, 0, H - 3, W, 3, C.greenDark);
 }
 
 function drawRock(ctx, W, H) {
@@ -692,7 +836,7 @@ export function buildSprites() {
   SPR.van = [];
   for (let i = 0; i < 5; i++) {
     const lean = (i - 2) / 2;
-    SPR.van.push(bake(100, 78, 0.44, (ctx) => drawCaravan(ctx, 100, 78, lean), VAN_LAMPS));
+    SPR.van.push(bake(88, 82, 0.38, (ctx) => drawCaravan(ctx, 88, 82, lean), VAN_LAMPS));
   }
 
   const car = (w, h, worldW, opts) => {
@@ -724,6 +868,13 @@ export function buildSprites() {
 
   SPR.tree = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, false));
   SPR.treeDark = bake(80, 104, 0.62, (c) => drawTree(c, 80, 104, true));
+  SPR.pine = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, false));
+  SPR.pineDark = bake(64, 116, 0.52, (c) => drawPine(c, 64, 116, true));
+  SPR.deadTree = bake(72, 96, 0.56, (c) => drawDeadTree(c, 72, 96));
+  SPR.bush = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, false));
+  SPR.bushDark = bake(48, 32, 0.36, (c) => drawBush(c, 48, 32, true));
+  SPR.grass = bake(24, 22, 0.18, (c) => drawGrass(c, 24, 22, false));
+  SPR.grassDark = bake(24, 22, 0.18, (c) => drawGrass(c, 24, 22, true));
   SPR.rock = bake(56, 48, 0.34, (c) => drawRock(c, 56, 48));
   SPR.sign = bake(68, 68, 0.40, (c) => drawSign(c, 68, 68));
   SPR.cone = bake(24, 32, 0.12, (c) => drawCone(c, 24, 32));

@@ -419,8 +419,18 @@ export class Game {
     }
   }
 
-  /** Add fuel: fills the main tank first, then tops up the reserve. */
+  /**
+   * Add fuel: fills the main tank first, then tops up the reserve.
+   *
+   * Refuses to do anything once the run is over.  A wreck that empties both
+   * tanks ends the game from inside the collision pass, and the rest of that
+   * same pass could otherwise still drive over a globe and quietly refuel a
+   * dead run -- leaving the game-over screen showing fuel in the tank.  It
+   * stays live during STAGE_END, which is when the between-stage top-up
+   * happens.
+   */
   refuel(amount) {
+    if (this.state === STATE.GAME_OVER) return;
     let left = amount;
     const room = K.FUEL_MAX - this.fuel;
     const into = Math.min(room, left);
@@ -779,7 +789,8 @@ export class Game {
 
     // ---- static objects, pickups and hazards ---------------------------
     this._forEachObjectInRange(zLo - K.SEG_LENGTH * 2, zHi + K.SEG_LENGTH * 2, (obj) => {
-      if (obj.dead) return;
+      // A hazard earlier in this same pass can have ended the run.
+      if (obj.dead || this.state !== STATE.PLAY) return;
       const half = K.SEG_LENGTH * 0.55;
       if (obj.z + half < zLo || obj.z - half > zHi) return;
       // Pickups get a generous grab box and hazards a tight one: missing a
@@ -831,7 +842,7 @@ export class Game {
     });
 
     // ---- cars ----------------------------------------------------------
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
+    for (let i = this.enemies.length - 1; i >= 0 && this.state === STATE.PLAY; i--) {
       const e = this.enemies[i];
       const half = K.VAN_LENGTH * 0.55;
       if (e.z + half < zLo || e.z - half > zHi) continue;
@@ -858,8 +869,9 @@ export class Game {
     }
 
     // ---- incoming fire --------------------------------------------------
+    if (this.state !== STATE.PLAY) return;
     this.bullets.forEach((b) => {
-      if (!b.hostile) return;
+      if (!b.hostile || this.state !== STATE.PLAY) return;
       const half = K.VAN_LENGTH * 0.5;
       if (b.z + half < zLo || b.z - half > zHi) return;
       if (!overlap(this.playerX, K.VAN_WIDTH, b.x, 0.06, 0.9)) return;
@@ -905,7 +917,9 @@ export class Game {
     this.audio.crash();
     this.explode(this.playerX, this.position + 200, 1.0);
     this.floater(this.playerX, this.position + 600, `-${Math.round(K.FUEL_CRASH * severity)} FUEL`, '#ff5533');
-    if (this.fuel <= 0) this._endGame();
+    // Ending the run is burn()'s job: it is the only thing that knows about
+    // the reserve.  Testing this.fuel here killed you the moment a wreck
+    // emptied the MAIN tank, with a full reserve still sitting untouched.
   }
 
   /** A glancing blow: shoved sideways, some speed and fuel gone. */

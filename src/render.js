@@ -60,6 +60,8 @@ export class Renderer {
     this.lamps = [];
     this.lampCount = 0;
     this.night = 0;
+    this.vanishX = K.SCREEN_W / 2;
+    this.vanishY = K.SCREEN_H / 2;
   }
 
   /**
@@ -139,6 +141,10 @@ export class Renderer {
       this._drawSegment(theme, seg);
       maxy = seg.p2.screen.y;
       horizonY = maxy;
+      // Where the road disappears.  The headlights aim at this, so they
+      // follow the tarmac round a bend instead of pointing off into a field.
+      this.vanishX = seg.p2.screen.x;
+      this.vanishY = maxy;
     }
 
     // Skyline sits on whatever the road turned out to be the horizon.
@@ -706,60 +712,70 @@ export class Renderer {
   /**
    * Headlight beams.
    *
-   * The lamps are on the FRONT of the van, which from a chase camera is the
-   * end you cannot see: it is further away, so it projects higher up the
-   * screen and slightly narrower than the tailgate.  Springing the beams from
-   * the rear bumper line instead makes the light look like it is leaking out
-   * from under the car.
+   * Two things were wrong before, and they compound.
    *
-   * So the cones start about a third of the way up the sprite, at roughly the
-   * van's own width, and fan out and away up the road.  Because this is drawn
-   * before the van, the bodywork masks the origin and the light reads as
-   * coming past it from in front.
+   * First, the lamps are on the FRONT of the van, which from a chase camera
+   * is the end you cannot see: it is further away, so it projects higher up
+   * the screen.  Springing the beams from the rear bumper line makes the
+   * light look like it is leaking out from underneath.
+   *
+   * Second -- and this is what made them read as aimed at the sky -- the
+   * cones widened with distance.  In world space a beam does splay outward,
+   * but on screen perspective shrinks everything far away far faster than the
+   * beam spreads, so the lit patch of road must NARROW toward the vanishing
+   * point exactly as the road does.  The beams are therefore built as
+   * quadrilaterals from wide-at-the-van to narrow-at-the-vanishing-point, and
+   * they track `vanishX`, so they sweep round a bend with the tarmac.
    */
   _drawHeadlights(g, theme, vanX, vanW, vanTop, vanH) {
     const ctx = this.ctx;
     const cx = vanX + vanW / 2;
-    // Origin at the front axle line, hidden behind the van's own body.
-    const originY = vanTop + vanH * 0.34;
-    const reach = H * 0.34;
-    const topY = originY - reach;
-    const strength = 0.14 + theme.dark * 0.50;
+    // Origin at the front axle line, masked by the van's own bodywork.
+    const originY = vanTop + vanH * 0.36;
+
+    // Aim at the road's vanishing point, but stop short of it: light does not
+    // actually reach the horizon, and a beam that touches it looks like fog.
+    const vanish = clamp(this.vanishY, 0, originY);
+    const throwFrac = 0.72;
+    const farY = originY - (originY - vanish) * throwFrac;
+    const farX = cx + (this.vanishX - cx) * throwFrac;
+
+    const strength = 0.20 + theme.dark * 0.78;
     const flicker = 1 - Math.random() * 0.04;
 
     ctx.globalCompositeOperation = 'lighter';
 
     for (const side of [-1, 1]) {
-      // Lamp sits just inboard of the body side.
-      const lx = cx + side * vanW * 0.36;
-      const nearHalf = vanW * 0.14;
-      const farHalf = vanW * 1.05;
+      const lx = cx + side * vanW * 0.34;
+      // Wide where the road is wide, narrow where it converges.
+      const nearHalf = vanW * 0.52;
+      const farHalf = vanW * 0.11;
 
-      const grad = ctx.createLinearGradient(0, originY, 0, topY);
+      const grad = ctx.createLinearGradient(0, originY, 0, farY);
       grad.addColorStop(0, `rgba(255,244,196,${(strength * flicker).toFixed(3)})`);
-      grad.addColorStop(0.35, `rgba(255,240,180,${(strength * 0.52).toFixed(3)})`);
+      grad.addColorStop(0.30, `rgba(255,240,180,${(strength * 0.70).toFixed(3)})`);
       grad.addColorStop(1, 'rgba(255,240,180,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.moveTo(lx - nearHalf, originY);
       ctx.lineTo(lx + nearHalf, originY);
-      ctx.lineTo(lx + side * 0.2 * vanW + farHalf, topY);
-      ctx.lineTo(lx + side * 0.2 * vanW - farHalf, topY);
+      ctx.lineTo(farX + side * vanW * 0.10 + farHalf, farY);
+      ctx.lineTo(farX + side * vanW * 0.10 - farHalf, farY);
       ctx.closePath();
       ctx.fill();
     }
 
-    // Hot pool of light on the tarmac just in front of the bumper.
-    const poolTop = originY - reach * 0.30;
+    // Hot pool of light on the tarmac immediately in front of the bumper.
+    const poolTop = originY - (originY - farY) * 0.28;
     const pool = ctx.createLinearGradient(0, originY, 0, poolTop);
-    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.62).toFixed(3)})`);
+    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.80).toFixed(3)})`);
     pool.addColorStop(1, 'rgba(255,248,214,0)');
     ctx.fillStyle = pool;
     ctx.beginPath();
-    ctx.moveTo(cx - vanW * 0.40, originY);
-    ctx.lineTo(cx + vanW * 0.40, originY);
-    ctx.lineTo(cx + vanW * 0.85, poolTop);
-    ctx.lineTo(cx - vanW * 0.85, poolTop);
+    ctx.moveTo(cx - vanW * 0.92, originY);
+    ctx.lineTo(cx + vanW * 0.92, originY);
+    ctx.lineTo(cx + (farX - cx) * 0.28 + vanW * 0.50, poolTop);
+    ctx.lineTo(cx + (farX - cx) * 0.28 - vanW * 0.50, poolTop);
     ctx.closePath();
     ctx.fill();
 
