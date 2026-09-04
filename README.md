@@ -1,8 +1,3 @@
-> This repository holds two unrelated browser projects.
-> **Horrible Car** — described below — lives at the repository root.
-> **[Viceroy Drone Synth](drone-synth/)** — an evolving Web Audio drone
-> instrument — lives in [`drone-synth/`](drone-synth/README.md).
-
 # Horrible Car
 
 A browser port of Atari Games' **Road Blasters** (1987), except you are not
