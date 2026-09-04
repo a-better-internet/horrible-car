@@ -220,15 +220,27 @@ cannot see. The beams therefore start about a third of the way up the sprite
 and are masked by the bodywork; springing them from the rear bumper line makes
 the light look like it is leaking out from underneath.
 
-They also **narrow** with distance. In world space a beam splays outward, but
-on screen perspective shrinks the far field much faster than the beam spreads,
-so the lit patch of road has to converge exactly as the road does — a shape
-that widens up the screen reads as pointed at the sky. The throw is three
-tapering corridors stacked from a merged pool at the bumper to a point most of
-the way to the vanishing point: a wide soft spill, a defined main beam, and a
-hot core. Three passes is what gives it a beam *edge* rather than a flat wedge.
-All of it tracks the vanishing point the road pass recorded, so the light
-sweeps round a bend with the tarmac.
+The beam's **shape** is the part worth getting exactly right. A headlight is
+a cone from a small lamp: its lit patch at distance `d` has half-width about
+`w0 + d·tan(spread)`, and projecting that to screen scales it by `1/d`, giving
+`w0/d + tan(spread)`. So on screen the beam
+
+- **starts narrow**, at the lamp — a small object inboard of the bodywork, so
+  the two beams together are narrower than the van where they begin;
+- **flares fast** over the first few car lengths, onto ground that genuinely
+  is wider than the car;
+- then **tapers** away with the road toward the vanishing point.
+
+That is a lens shape, not a trapezoid, which is why it is built from
+`[reach, halfWidth]` control points rather than a single near/far pair, in
+three layers — a soft spill, a defined main beam and a hot core — because
+three passes are what give it a beam *edge* instead of a flat wedge. The
+geometry is exported and there is a test asserting
+`2·(LAMP_X + controls[0][1]) < 1` van width: an early version set the near
+half-width above a full van width, which put the origin at nearly three van
+widths across and made the light read as a glow leaking out from under the
+car. Beam centres converge on the vanishing point the road pass recorded, so
+the light sweeps round a bend with the tarmac.
 
 On screen the van also shifts slightly **into** the direction you steer — a
 chase camera lagging a turning car — while drifting toward the *outside* of a

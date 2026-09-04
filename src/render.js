@@ -42,6 +42,27 @@ const PARTICLE_WORLD_W = 34;
  * with a wall of colour.
  */
 const SPRITE_NEAR_Z = K.PLAYER_Z * 0.85;
+
+/*
+ * Headlight beam geometry.
+ *
+ * Exported so the invariant below can be tested rather than merely intended.
+ *
+ * LAMP_X is the lamp's offset from the van's centreline, and each control
+ * point is [reach, halfWidth] -- reach as a fraction of the distance to the
+ * vanishing point, halfWidth in van-widths.  A headlight is a small lamp, so
+ * the beams MUST be narrower than the van where they start:
+ *
+ *     2 * (LAMP_X + controls[0][1])  <  1 van width
+ *
+ * Break that and the light reads as a glow leaking out from under the car
+ * rather than as two beams.  They flare wide a fifth of the way out, onto
+ * ground that genuinely is wider than the car, then taper with the road.
+ */
+export const LAMP_X = 0.32;
+export const BEAM_SPILL = [[0, 0.13], [0.20, 0.78], [0.48, 0.50], [0.78, 0.23], [0.95, 0.10]];
+export const BEAM_MAIN = [[0, 0.09], [0.18, 0.50], [0.45, 0.33], [0.74, 0.16], [0.92, 0.07]];
+export const BEAM_CORE = [[0, 0.06], [0.14, 0.28], [0.38, 0.17], [0.62, 0.07]];
 /** Belt-and-braces size cap for the pathological cases the near plane misses. */
 const SPRITE_MAX_W = W * 3;
 
@@ -851,83 +872,82 @@ export class Renderer {
   /**
    * Headlight throw.
    *
-   * Built to look like a real beam pattern photographed from behind the car:
-   * a single merged pool of light starting at the bumper and narrowing into a
-   * long corridor that runs most of the way to the vanishing point, brightest
-   * near the car and dying out at the far end.
+   * The shape is the whole problem, so it is worth being explicit about it.
    *
-   * Two things this has to get right, both of which were wrong before:
+   * A headlight is a cone from a small lamp.  On the ground, its lit patch at
+   * distance `d` has half-width roughly `w0 + d*tan(spread)`.  Projected to
+   * screen that scales by 1/d, giving `w0/d + tan(spread)`: very wide close
+   * up (the `w0/d` term blows up), settling toward a constant angular width
+   * far away.  Combined with the road's own convergence, the beam therefore
    *
-   *   1. The lamps are on the FRONT of the van, which from a chase camera is
-   *      the end you cannot see.  Springing the light from the rear bumper
-   *      line makes it look like it is leaking out from underneath.
-   *   2. The lit patch has to NARROW with distance.  In world space a beam
-   *      splays outward, but on screen perspective shrinks the far field far
-   *      faster than the beam spreads, so the light must converge exactly as
-   *      the road does.  A shape that widens up the screen reads as aimed at
-   *      the sky.
+   *   - starts NARROW, at the lamp, which is a small object inboard of the
+   *     bodywork -- it cannot be wider than the van at its origin;
+   *   - flares out fast over the first few car lengths, onto ground that is
+   *     genuinely wider than the car;
+   *   - then tapers away with the road toward the vanishing point.
    *
-   * It is drawn in three passes -- a wide soft spill, a defined main beam, and
-   * a hot core -- which is what gives a beam edge instead of a flat wedge.
-   * All of it tracks `vanishX`, so the light sweeps round a bend with the
-   * tarmac rather than shining off into a field.
+   * That is a lens shape, not a trapezoid, and it is why this is built from
+   * control points rather than from a single near/far width pair.  Earlier
+   * versions set the near half-width to more than a van width, which put the
+   * origin at nearly three van widths across and made the light read as a
+   * glow leaking out from under the car.
+   *
+   * The lamps are also on the FRONT, which from a chase camera is the end you
+   * cannot see: further away, so higher up the screen and masked by the van's
+   * own body.
    */
   _drawHeadlights(g, theme, vanX, vanW, vanTop, vanH) {
     const ctx = this.ctx;
     const cx = vanX + vanW / 2;
-    // Origin at the front axle line, masked by the van's own bodywork.
     const originY = vanTop + vanH * 0.34;
     const vanish = clamp(this.vanishY, 0, originY);
     const span = originY - vanish;
     if (span < 8) return;
 
-    const strength = 0.16 + theme.dark * 0.72;
+    const strength = 0.16 + theme.dark * 0.74;
     const flicker = 1 - Math.random() * 0.035;
 
     /**
-     * One tapering corridor from the van to `reach` of the way to the
-     * vanishing point.  `nearW`/`farW` are half-widths in van-widths.
+     * One beam, as a polygon through [distance, half-width] control points.
+     * `reach` is the fraction of the way to the vanishing point; `halfW` is
+     * in van-widths.  Beam centres converge toward the vanishing point, so
+     * the light follows the tarmac round a bend.
      */
-    const corridor = (nearW, farW, reach, alpha, tint) => {
-      const farY = originY - span * reach;
-      const farX = cx + (this.vanishX - cx) * reach;
+    const beam = (lampSide, ctrls, alpha, tint) => {
+      const lampX = cx + lampSide * vanW * LAMP_X;
+      const farY = originY - span * ctrls[ctrls.length - 1][0];
       const grad = ctx.createLinearGradient(0, originY, 0, farY);
       grad.addColorStop(0, `rgba(${tint},${(alpha * flicker).toFixed(3)})`);
-      grad.addColorStop(0.22, `rgba(${tint},${(alpha * 0.82).toFixed(3)})`);
-      grad.addColorStop(0.62, `rgba(${tint},${(alpha * 0.34).toFixed(3)})`);
+      grad.addColorStop(0.20, `rgba(${tint},${(alpha * 0.92).toFixed(3)})`);
+      grad.addColorStop(0.58, `rgba(${tint},${(alpha * 0.40).toFixed(3)})`);
       grad.addColorStop(1, `rgba(${tint},0)`);
       ctx.fillStyle = grad;
+
+      const px = (r, hw, sign) => {
+        const y = originY - span * r;
+        const c = lampX + (this.vanishX - lampX) * r;
+        return [c + sign * vanW * hw, y];
+      };
+
       ctx.beginPath();
-      ctx.moveTo(cx - vanW * nearW, originY);
-      ctx.lineTo(cx + vanW * nearW, originY);
-      ctx.lineTo(farX + vanW * farW, farY);
-      ctx.lineTo(farX - vanW * farW, farY);
+      for (let i = 0; i < ctrls.length; i++) {
+        const [x, y] = px(ctrls[i][0], ctrls[i][1], -1);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      for (let i = ctrls.length - 1; i >= 0; i--) {
+        const [x, y] = px(ctrls[i][0], ctrls[i][1], 1);
+        ctx.lineTo(x, y);
+      }
       ctx.closePath();
       ctx.fill();
     };
 
     ctx.globalCompositeOperation = 'lighter';
-    // Soft spill either side of the beam.
-    corridor(1.35, 0.16, 0.60, strength * 0.30, '255,238,178');
-    // The beam proper: a long, defined corridor almost to the horizon.
-    corridor(0.86, 0.075, 0.86, strength * 0.62, '255,243,196');
-    // Hot core close to the car, where the two lamps overlap.
-    corridor(0.46, 0.035, 0.46, strength * 0.70, '255,250,224');
-
-    // The bright wash immediately in front of the bumper.
-    const poolTop = originY - span * 0.16;
-    const pool = ctx.createLinearGradient(0, originY, 0, poolTop);
-    pool.addColorStop(0, `rgba(255,250,226,${(strength * 0.55).toFixed(3)})`);
-    pool.addColorStop(1, 'rgba(255,250,226,0)');
-    ctx.fillStyle = pool;
-    ctx.beginPath();
-    ctx.moveTo(cx - vanW * 1.45, originY);
-    ctx.lineTo(cx + vanW * 1.45, originY);
-    ctx.lineTo(cx + vanW * 0.95, poolTop);
-    ctx.lineTo(cx - vanW * 0.95, poolTop);
-    ctx.closePath();
-    ctx.fill();
-
+    for (const side of [-1, 1]) {
+      beam(side, BEAM_SPILL, strength * 0.26, '255,238,178');
+      beam(side, BEAM_MAIN, strength * 0.52, '255,243,196');
+      beam(side, BEAM_CORE, strength * 0.62, '255,250,224');
+    }
     ctx.globalCompositeOperation = 'source-over';
     void g;
   }
