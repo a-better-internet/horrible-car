@@ -38,8 +38,10 @@ it does pin down the machine the game was written for, and three things came
 straight out of it:
 
 **The raster.** `Arcade-atarisys1.sv` instantiates `arcade_video` at 320 pixels
-wide with a 12-bit colour bus. The game renders into a 320×240 buffer and is
-scaled up with nearest-neighbour, integer where it fits.
+wide with a 12-bit colour bus. The game keeps that 4:3 framing but renders at
+640×480 — twice the density, so a car closing at 250 mph has enough pixels to
+read as a car. The HUD is still laid out in 320×240 arcade units and drawn
+through a scale transform, which keeps it on exact pixel boundaries.
 
 **The colour model.** `VIDEO.vhd` slices each 16-bit CRAM word into
 `INT:RED:GRN:BLU` nibbles, and `RGBI.vhd` holds the PROM that turns each
@@ -64,6 +66,13 @@ wrecks, sideswipes and turret hits all cost it. Run dry and the rally is over
 wherever you happen to be standing. One tank does not cover a stage, so
 collecting globes is not optional.
 
+**The camera** sits high and well back, as the arcade's did. That framing is
+not decoration: a low chase camera hides the very lane you are shooting into.
+`CAMERA_HEIGHT` and `PLAYER_PULLBACK` in `config.js` are the only two knobs —
+the van's on-screen size and height are derived from the projection at its own
+depth, not from hardcoded screen fractions, so pulling the camera back shrinks
+the van and lifts it up the frame exactly as it should.
+
 **The road** is a segment list carrying curvature and height. Curvature is
 accumulated across the draw loop (`x += dx; dx += curve`), which is what makes
 long sweepers bend instead of kink; hills come from segment heights plus a
@@ -84,6 +93,21 @@ Door Spreader, cruise missiles, nitro, or an Electro Shield.
 is the same road every time you reach it. Themes cycle through day, dusk,
 night, fog, rust and snow.
 
+**The ramp** is eased rather than linear (`t^1.35`), so the opening stages stay
+short and gentle and the back half climbs hard. Everything scales off that one
+value — length, corner severity, hills, bridge frequency, traffic density, the
+enemy mix, mines and turrets — and piece length is a ramping mean with only
+mild variance, so a later stage is never accidentally shorter than an earlier
+one. Measured end to end: stage 1 is 589 segments (~13s) with 20 cars and no
+hazards; stage 50 is 2072 segments (~48s) with 358 cars, 32 mines and 14
+turrets.
+
+**After dark** the van throws real headlight beams, and every lamp in the world
+— car head- and tail-lights, streetlights, turret sensors, mines, fuel globes,
+billboard floods, the skyline's windows — is queued during the sprite pass and
+painted additively *after* the night wash. Lighting them before it would just
+mean dimming the lights.
+
 ## Layout
 
 | File | |
@@ -93,7 +117,8 @@ night, fog, rust and snow.
 | `src/road.js` | segment track, projection, stage geometry |
 | `src/entities.js` | object pools, enemy catalogue, stage populator |
 | `src/game.js` | the simulation — physics, collisions, fuel, scoring |
-| `src/render.js` | sky, road, sprites, effects |
+| `src/render.js` | sky, road, sprites, lighting, effects |
+| `src/skyline.js` | the Pittsburgh horizon, baked once per theme |
 | `src/hud.js` | HUD and the between-play screens |
 | `src/sprites.js` | all artwork, drawn procedurally at load |
 | `src/font.js` | 5×7 bitmap font |
@@ -124,6 +149,9 @@ done about them here:
   screen and the road paints down from the furthest visible segment, so the
   sky/world boundary is wherever the road actually ends. A separately guessed
   horizon leaves a slab of ground colour floating on hills.
+- **Lights dimmed by the thing that makes it night.** The night wash is applied
+  after the world and before the van, and lamps are deferred past it, so
+  headlights brighten a dark scene instead of being darkened with it.
 - **Stuck keys after alt-tab.** `keyup` never arrives for a window that lost
   focus, so blur releases every key and pauses (except on the attract screen,
   which is a demo).
@@ -135,5 +163,17 @@ done about them here:
 - **Storage that throws.** `localStorage` is wrapped; private mode loses your
   high score rather than the game.
 
-Measured on the last stage with maximum traffic and repeated cruise missiles:
-median frame 16.7 ms, p95 17.3 ms, peak 21 cars and 165 particles live.
+Measured at 640×480 on the last stage with maximum traffic and repeated cruise
+missiles: median frame 16.7 ms, p95 17.1 ms, peak 27 cars and 193 particles
+live.
+
+## The city
+
+The skyline is Pittsburgh, built from the silhouettes that actually identify
+it: the US Steel Tower as a flat-topped Cor-Ten slab (it is meant to rust),
+PPG Place as a cluster of glass gothic spires, the Gulf Tower's stepped
+ziggurat cap, Fifth Avenue Place's needle, mill stacks still smoking, and gold
+truss bridges — in this city they are all the same yellow. It is baked once per
+theme into an offscreen strip and blitted twice per frame; at night its windows
+light up. Rebuilding it from rectangles every frame would be hundreds of fill
+calls for something that only ever slides sideways.

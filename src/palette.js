@@ -103,7 +103,7 @@ export const THEMES = {
     rumble: [q('fd55'), q('f988')],
     lane: q('fdb8'),
     haze: q('c855'), fogDensity: 4.0,
-    dark: 0.12,
+    dark: 0.22,
   },
   night: {
     name: 'NIGHT',
@@ -113,7 +113,7 @@ export const THEMES = {
     rumble: [q('c944'), q('b667')],
     lane: q('e999'),
     haze: q('2112'), fogDensity: 6.5,
-    dark: 0.42,
+    dark: 0.52,
   },
   fog: {
     name: 'FOG',

@@ -7,9 +7,25 @@
  * and sprite scaling in the same space.
  */
 
-export const SCREEN_W = 320;   // Atari System 1 visible raster, see Arcade-atarisys1.sv
-export const SCREEN_H = 240;
+/*
+ * Render buffer.
+ *
+ * The Atari System 1 raster was 320x240 (see Arcade-atarisys1.sv).  We render
+ * at exactly twice that: the 4:3 shape and the arcade framing are preserved,
+ * but there are four times as many pixels to describe a car with, which
+ * matters a great deal when it is closing at 250 mph.  RES is the factor
+ * between the original raster and this one; hardcoded pixel sizes in the
+ * renderer are expressed in original-raster units and multiplied by it.
+ */
+export const BASE_W = 320;
+export const BASE_H = 240;
+export const RES = 2;
+export const SCREEN_W = BASE_W * RES;
+export const SCREEN_H = BASE_H * RES;
 export const ASPECT = 4 / 3;
+
+/** The HUD is laid out in original-raster units and scaled up by this. */
+export const UI_SCALE = RES;
 
 /** Simulation runs on a fixed step so physics never depend on framerate. */
 export const STEP = 1 / 120;
@@ -20,10 +36,29 @@ export const SEG_LENGTH = 200;
 export const ROAD_WIDTH = 2000;       // half-width of the tarmac in road units
 export const RUMBLE_WIDTH = ROAD_WIDTH / 5;
 export const LANES = 4;
-export const CAMERA_HEIGHT = 1150;
+/*
+ * Camera.
+ *
+ * Road Blasters put the eye high and well back from the car: you see a long
+ * way up the road, the car is small, and it sits high enough in the frame
+ * that there is tarmac below it.  That framing is what makes aiming possible
+ * -- a low chase camera hides the very lane you are shooting into.
+ *
+ * PLAYER_Z is the camera-to-van distance.  At exactly CAMERA_HEIGHT *
+ * CAMERA_DEPTH the van projects to the bottom edge of the screen; every
+ * multiple beyond that lifts it up the frame and shrinks it by the same
+ * factor.  PLAYER_PULLBACK is therefore the single knob for "how zoomed out".
+ */
+export const CAMERA_HEIGHT = 1600;
 export const CAMERA_DEPTH = 1 / Math.tan(((100 / 2) * Math.PI) / 180); // 100 deg FOV
-export const DRAW_DISTANCE = 190;     // segments drawn ahead of the camera
-export const PLAYER_Z = CAMERA_HEIGHT * CAMERA_DEPTH; // camera-to-van distance
+export const DRAW_DISTANCE = 220;     // segments drawn ahead of the camera
+export const PLAYER_PULLBACK = 1.85;
+export const PLAYER_Z = CAMERA_HEIGHT * CAMERA_DEPTH * PLAYER_PULLBACK;
+
+/** Projection scale at the van's own depth -- constant, so precompute it. */
+export const PLAYER_SCALE = CAMERA_DEPTH / PLAYER_Z;
+/** Screen y of the road surface under the van, in buffer pixels. */
+export const PLAYER_GROUND_Y = SCREEN_H / 2 + PLAYER_SCALE * CAMERA_HEIGHT * (SCREEN_H / 2);
 
 // ---------------------------------------------------------------- van physics
 export const MAX_SPEED = SEG_LENGTH / STEP / 2;  // 12000 u/s, one seg per 60Hz frame

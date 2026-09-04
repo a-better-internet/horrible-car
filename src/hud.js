@@ -10,13 +10,14 @@ import * as K from './config.js';
 import { UI, THEMES } from './palette.js';
 import { clamp, commas, pad } from './util.js';
 import { STATE } from './game.js';
-import { SPR } from './sprites.js';
 import {
   text, textRight, textCentered, textCenteredShadow, textWidth,
 } from './font.js';
 
-const W = K.SCREEN_W;
-const H = K.SCREEN_H;
+// The HUD is drawn through a UI_SCALE transform, so it lays out in the
+// original 320x240 arcade raster and comes out crisp at any multiple.
+const W = K.BASE_W;
+const H = K.BASE_H;
 
 /** Horizontal bar with a border, used for fuel and stage progress. */
 function bar(ctx, x, y, w, h, frac, fill, back, border) {
@@ -200,51 +201,60 @@ export class Hud {
 
   // ----------------------------------------------------------------- attract
 
+  /**
+   * Attract screen.
+   *
+   * The demo drives underneath, so the layout leaves the band the van
+   * occupies clear and puts the copy above and below it.  Every text block
+   * gets a solid panel: at speed the road behind is a moving field of light
+   * and dark, and unbacked text on top of it is unreadable half the time.
+   */
   _attract(g) {
     const ctx = this.ctx;
-    dim(ctx, 0.34);
+    dim(ctx, 0.30);
 
-    // Title.
+    const panel = (y, h, a = 0.78) => {
+      ctx.fillStyle = `rgba(0,0,0,${a})`;
+      ctx.fillRect(0, y, W, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      ctx.fillRect(0, y, W, 1);
+      ctx.fillRect(0, y + h - 1, W, 1);
+    };
+
+    // ---- title ----------------------------------------------------------
     const bob = Math.round(Math.sin(g.time * 1.6) * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, 18 + bob, W, 50);
-    textCenteredShadow(ctx, 'HORRIBLE', W / 2, 22 + bob, UI.tan, 3);
-    textCenteredShadow(ctx, 'CAR', W / 2, 46 + bob, UI.red, 3);
+    panel(8, 56, 0.82);
+    textCenteredShadow(ctx, 'HORRIBLE', W / 2, 13 + bob, UI.tan, 3);
+    textCenteredShadow(ctx, 'CAR', W / 2, 38 + bob, UI.red, 3);
 
-    // A van, parked on the title screen, next to the strapline.
-    const spr = SPR.van[2];
-    const vw = 58;
-    const vh = Math.round(vw * spr.aspect);
-    const vx = Math.round(W / 2 - vw / 2);
-    const vy = 76;
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
-    ctx.fillRect(0, 70, W, vh + 26);
-    ctx.drawImage(spr.canvas, vx, vy, vw, vh);
-    textCentered(ctx, '1994 DODGE CARAVAN', W / 2, vy + vh + 4, UI.tan, 1);
-    textCentered(ctx, 'VS 50 STAGES OF TRAFFIC', W / 2, vy + vh + 13, UI.white, 1);
+    // ---- strapline ------------------------------------------------------
+    panel(66, 24);
+    textCentered(ctx, '1994 DODGE CARAVAN', W / 2, 70, UI.tan, 1);
+    textCentered(ctx, 'VS 50 STAGES OF TRAFFIC', W / 2, 80, UI.white, 1);
 
-    // Rotating instruction panel.
-    const panelY = 70 + vh + 30;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, panelY, W, 24);
+    // ---- rotating instruction card --------------------------------------
+    panel(94, 24);
     const page = Math.floor(g.attractTimer / 4) % 3;
     if (page === 0) {
-      textCentered(ctx, 'ARROWS STEER  UP GAS  DOWN BRAKE', W / 2, panelY + 4, UI.amber, 1);
-      textCentered(ctx, 'SPACE FIRE  SHIFT MISSILE  C NITRO', W / 2, panelY + 14, UI.amber, 1);
+      textCentered(ctx, 'ARROWS STEER  UP GAS  DOWN BRAKE', W / 2, 98, UI.amber, 1);
+      textCentered(ctx, 'SPACE FIRE  SHIFT MISSILE  C NITRO', W / 2, 108, UI.amber, 1);
     } else if (page === 1) {
-      textCentered(ctx, 'FUEL IS YOUR ONLY LIFE', W / 2, panelY + 4, UI.cyan, 1);
-      textCentered(ctx, 'GRAB GLOBES. REACH THE FINISH.', W / 2, panelY + 14, UI.cyan, 1);
+      textCentered(ctx, 'FUEL IS YOUR ONLY LIFE', W / 2, 98, UI.cyan, 1);
+      textCentered(ctx, 'GRAB GLOBES. REACH THE FINISH.', W / 2, 108, UI.cyan, 1);
     } else {
-      textCentered(ctx, 'THE RESCUE CRUISER DROPS WEAPONS', W / 2, panelY + 4, UI.green, 1);
-      textCentered(ctx, 'DRIVE OVER A POD TO ARM IT', W / 2, panelY + 14, UI.green, 1);
+      textCentered(ctx, 'THE RESCUE CRUISER DROPS WEAPONS', W / 2, 98, UI.green, 1);
+      textCentered(ctx, 'DRIVE OVER A POD TO ARM IT', W / 2, 108, UI.green, 1);
     }
 
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, H - 28, W, 28);
+    // The band from here to ~190 is left clear for the demo to drive through.
+
+    // ---- start prompt ---------------------------------------------------
+    panel(H - 46, 46, 0.82);
     if (Math.floor(g.time * 2) % 2 === 0) {
-      textCenteredShadow(ctx, 'PRESS ENTER TO START', W / 2, H - 24, UI.white, 1);
+      textCenteredShadow(ctx, 'PRESS ENTER TO START', W / 2, H - 40, UI.white, 1);
     }
-    textCentered(ctx, `HIGH SCORE  ${commas(g.highScore)}`, W / 2, H - 11, UI.yellow, 1);
+    textCentered(ctx, `HIGH SCORE  ${commas(g.highScore)}`, W / 2, H - 26, UI.yellow, 1);
+    textCentered(ctx, 'AFTER ATARI ROAD BLASTERS, 1987', W / 2, H - 13, UI.dim, 1);
   }
 }
 

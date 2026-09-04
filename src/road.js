@@ -137,7 +137,6 @@ export class Track {
 /** Extra segments appended past the finish line so the horizon keeps drawing. */
 const DRAW_PADDING = 220;
 
-const ROAD = { short: 22, medium: 44, long: 88 };
 const CURVE = { easy: 1.5, medium: 3.2, hard: 4.8, brutal: 6.2 };
 const HILL = { low: 900, medium: 2100, high: 3800 };
 
@@ -152,41 +151,57 @@ export function buildTrack(stage) {
   track.theme = STAGE_THEME_ORDER[(stage - 1) % STAGE_THEME_ORDER.length];
   track.name = STAGE_NAMES[(stage - 1) % STAGE_NAMES.length];
 
-  // Difficulty ramps over the 50-stage rally: longer, twistier, hillier.
-  // Stage length is set so a clean run takes roughly 30-50 seconds, which is
-  // what makes the fuel economy bite: one tank does not cover a stage, so
-  // you have to go and get the globes.
+  /*
+   * Difficulty ramp.
+   *
+   * `t` is progress through the rally, 0 at stage 1 and 1 at stage 50.  It is
+   * eased rather than linear: the first handful of stages stay noticeably
+   * short and gentle so there is room to learn the van, and the back half
+   * climbs harder.  Everything difficulty-related in the generator is a
+   * function of it, so the curve is tuned in one place.
+   *
+   * Length is set so a clean early run is ~25 seconds and a late one ~70.
+   * That is what makes the fuel economy bite: one tank never covers a stage,
+   * so you have to go and get the globes.
+   */
   const t = Math.min(1, (stage - 1) / (TOTAL_STAGES - 1));
-  const pieces = Math.round(lerp(15, 27, t));
-  const twist = lerp(0.60, 1.10, t);
-  const hilliness = lerp(0.5, 1.25, t);
+  const ramp = Math.pow(t, 1.35);           // slow start, hard finish
+  const pieces = Math.round(lerp(11, 34, ramp));
+  const twist = lerp(0.48, 1.18, ramp);
+  const hilliness = lerp(0.35, 1.35, ramp);
 
   // Straight launch pad: gives the player a moment before the first corner.
-  track.addSegments(60, 0, 0);
+  // It shortens as the rally goes on -- later stages throw you straight in.
+  track.addSegments(Math.round(lerp(70, 40, ramp)), 0, 0);
 
   let y = 0;
   for (let i = 0; i < pieces; i++) {
-    const len = rng.pick([ROAD.short, ROAD.medium, ROAD.medium, ROAD.long]);
+    // Piece length is a ramping mean with only mild variance.  Picking freely
+    // from short/medium/long made total stage length swing so wide that a
+    // later stage could come out shorter than an earlier one, which reads as
+    // the difficulty curve going backwards.
+    const len = Math.max(14, Math.round(lerp(44, 58, ramp) * rng.range(0.82, 1.18)));
     const enter = Math.round(len * 0.35);
     const hold = Math.round(len * 0.45);
     const leave = len - enter - hold;
 
-    // Curvature: sometimes a straight, otherwise a signed corner.
+    // Curvature: sometimes a straight, otherwise a signed corner.  Straights
+    // get rarer as the rally goes on.
     let curve = 0;
-    if (!rng.chance(0.22)) {
+    if (!rng.chance(lerp(0.34, 0.13, ramp))) {
       const mag = rng.pick([CURVE.easy, CURVE.medium, CURVE.medium, CURVE.hard, CURVE.brutal]);
       curve = mag * twist * (rng.chance(0.5) ? 1 : -1);
     }
 
     // Hills.
-    if (rng.chance(0.62)) {
+    if (rng.chance(lerp(0.42, 0.74, ramp))) {
       const h = rng.pick([HILL.low, HILL.low, HILL.medium, HILL.high]) * hilliness;
       y += rng.chance(0.5) ? h : -h;
       y = Math.max(-6000, Math.min(9000, y));
     }
 
     // Narrow bridge sections (no shoulder, and a long way down).
-    const width = stage >= 5 && rng.chance(0.16) ? 0.60 : 1;
+    const width = stage >= 6 && rng.chance(lerp(0.05, 0.24, ramp)) ? 0.60 : 1;
 
     track.addRoad(enter, hold, leave, curve, y, width);
   }

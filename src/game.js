@@ -104,6 +104,7 @@ export class Game {
     this.nitroTimer = 0;
     this.fireCooldown = 0;
     this.offRoad = false;
+    this.braking = false;
     this.rumble = 0;
 
     this.enemies.length = 0;
@@ -256,6 +257,7 @@ export class Game {
       else this.speed += K.COAST_DECEL * dt;
       if (input.brake > 0.01) this.speed += K.BRAKING * input.brake * dt;
     }
+    this.braking = input.brake > 0.05 && !wrecked;
     // Over the current ceiling (e.g. nitro just expired): bleed off rather
     // than snapping down, which would feel like hitting a wall.
     if (this.speed > maxV) this.speed = Math.max(maxV, this.speed + K.COAST_DECEL * dt);

@@ -16,12 +16,15 @@ import * as K from './config.js';
 import { project } from './road.js';
 import { THEMES, UI, mix, cssa } from './palette.js';
 import { SPR } from './sprites.js';
+import { skylineFor, TILE_W, TILE_H } from './skyline.js';
 import { clamp, lerp, exponentialFog } from './util.js';
 import { STATE } from './game.js';
 import { textCenteredShadow } from './font.js';
 
 const W = K.SCREEN_W;
 const H = K.SCREEN_H;
+/** Hardcoded pixel sizes below are in original-raster units; R scales them. */
+const R = K.RES;
 
 /** Sprite size, per road unit of width, at the segment's projection scale. */
 const HALF_W = W / 2;
@@ -48,6 +51,15 @@ export class Renderer {
     this.ctx = ctx;
     this.ctx.imageSmoothingEnabled = false;
     this.skyOffset = 0;
+    /**
+     * Lamps to light up after the night wash.  The wash is painted over the
+     * world *after* the sprite pass, so anything that is supposed to glow has
+     * to be deferred past it -- otherwise we would be dimming the lights.
+     * Reused between frames rather than reallocated.
+     */
+    this.lamps = [];
+    this.lampCount = 0;
+    this.night = 0;
   }
 
   /**
@@ -57,6 +69,8 @@ export class Renderer {
   render(g, dt) {
     const ctx = this.ctx;
     const theme = THEMES[g.theme] || THEMES.day;
+    this.night = theme.dark;
+    this.lampCount = 0;
 
     ctx.save();
 
@@ -128,7 +142,7 @@ export class Renderer {
     }
 
     // Skyline sits on whatever the road turned out to be the horizon.
-    this._drawHills(theme, horizonY);
+    this._drawHills(g.theme, theme, horizonY);
 
     // ---- bucket everything dynamic into its segment ----------------------
     this._bucket(g, base.index, base.index + drawn);
@@ -151,23 +165,31 @@ export class Renderer {
       for (let i = 0; i < dyn.length; i++) this._drawDynamic(g, seg, dyn[i]);
     }
 
-    // ---- the van ---------------------------------------------------------
+    // ---- the Rescue Cruiser ---------------------------------------------
+    // Before the night wash, because it is up in the sky with everything else.
+    if (g.rescue.active) this._drawRescue(g);
+
+    // ---- nightfall -------------------------------------------------------
+    // Applied to the world but NOT to the van or its beams: the headlights
+    // have to brighten an already-dark scene, so anything additive must come
+    // after this.  Overdrawn past the edges so screen shake cannot expose an
+    // unwashed border.
+    if (theme.dark > 0) {
+      // A very dark blue rather than flat black: night on a highway is
+      // moonlit, and a pure-black wash just greys everything out.
+      ctx.fillStyle = cssa(2, 0, 0, 4, theme.dark);
+      ctx.fillRect(-32, -32, W + 64, H + 64);
+      this._flushLamps();
+    }
+
+    // ---- the van, and the light it throws -------------------------------
     if (g.state !== STATE.GAME_OVER || g.gameOverTimer > 5.4) {
       this._drawPlayer(g, playerSeg, theme);
     }
 
-    // ---- the Rescue Cruiser ---------------------------------------------
-    if (g.rescue.active) this._drawRescue(g);
-
     ctx.restore();
 
     // ---- full-screen effects --------------------------------------------
-    if (theme.dark > 0) {
-      // Night and dusk: darken everything, then punch a headlight cone back in.
-      ctx.fillStyle = cssa(0, 0, 0, 2, theme.dark);
-      ctx.fillRect(0, 0, W, H);
-      this._drawHeadlights(theme);
-    }
     if (g.flash > 0.01) {
       ctx.fillStyle = `rgba(255,255,255,${clamp(g.flash * 0.5, 0, 0.6)})`;
       ctx.fillRect(0, 0, W, H);
@@ -208,43 +230,41 @@ export class Renderer {
     if (theme.dark > 0.3) {
       ctx.fillStyle = UI.white;
       const twinkle = Math.floor(g.time * 2);
-      for (let i = 0; i < 46; i++) {
+      for (let i = 0; i < 46 * R; i++) {
         const sxx = (i * 8237) % W;
         const syy = (i * 3391) % Math.round(H * 0.55);
-        if ((i + twinkle) % 11 !== 0) ctx.fillRect(sxx, syy, 1, 1);
+        if ((i + twinkle) % 11 !== 0) ctx.fillRect(sxx, syy, R, R);
       }
     }
   }
 
   /**
-   * Distant scenery, sitting on the real horizon.
+   * The city, sitting on the real horizon.
    *
    * Drawn after the road because only then do we know where the horizon is:
    * `horizonY` is the top edge of the furthest tarmac we managed to draw.
-   * Everything above it is untouched sky, which is exactly the band these
-   * belong in.
+   * Everything above it is untouched sky, which is exactly the band the
+   * skyline belongs in.
    */
-  _drawHills(theme, horizonY) {
+  _drawHills(themeName, theme, horizonY) {
     const ctx = this.ctx;
     const y = clamp(horizonY, 0, H);
     if (y <= 0) return;
-    const off = ((this.skyOffset % 340) + 340) % 340;
-    ctx.fillStyle = mix(theme.haze, theme.ground[1], 0.42);
-    for (let k = -1; k <= 1; k++) {
-      const bx = Math.round(-off + k * 340);
-      for (let i = 0; i < 11; i++) {
-        const hx = bx + i * 31;
-        if (hx > W || hx + 30 < 0) continue;
-        const hh = 9 + ((i * 7919) % 19);
-        ctx.fillRect(hx, y - hh, 28, hh + 1);
-        ctx.fillRect(hx + 6, y - hh - 5, 15, 6);
-      }
+
+    const tile = skylineFor(themeName, theme);
+    // Scroll against the curve you are turning into.  The tile is wider than
+    // the screen, so two blits cover it for any offset.
+    const off = ((this.skyOffset % TILE_W) + TILE_W) % TILE_W;
+    const top = y - TILE_H;
+    for (let x = -off; x < W; x += TILE_W) {
+      ctx.drawImage(tile, Math.round(x), Math.round(top));
     }
-    // A haze band right on the horizon so the skyline does not sit on the
-    // road like a sticker.
-    ctx.globalAlpha = 0.5;
+
+    // Haze band along the waterline so the city does not sit on the road
+    // like a sticker.
+    ctx.globalAlpha = 0.55;
     ctx.fillStyle = theme.haze;
-    ctx.fillRect(0, y - 3, W, 4);
+    ctx.fillRect(0, y - 3 * R, W, 4 * R);
     ctx.globalAlpha = 1;
   }
 
@@ -392,6 +412,53 @@ export class Renderer {
       ctx.globalCompositeOperation = 'source-over';
     }
     ctx.globalAlpha = 1;
+
+    // After dark, remember where this sprite's lamps landed.  Skipped for
+    // very distant sprites, where the glow would be larger than the car.
+    if (this.night > 0.05 && spr.lamps && destW >= 12 && clipH < destH * 0.5) {
+      this._queueLamps(spr, destX, destY, destW, drawH, a);
+    }
+  }
+
+  /** Record one sprite's lamp rectangles in screen space for the glow pass. */
+  _queueLamps(spr, dx, dy, dw, dh, alpha) {
+    for (let i = 0; i < spr.lamps.length; i++) {
+      const L = spr.lamps[i];
+      let slot = this.lamps[this.lampCount];
+      if (!slot) { slot = { x: 0, y: 0, w: 0, h: 0, c: '', a: 1 }; this.lamps.push(slot); }
+      slot.x = dx + L.x * dw;
+      slot.y = dy + L.y * dh;
+      slot.w = Math.max(1, L.w * dw);
+      slot.h = Math.max(1, L.h * dh);
+      slot.c = L.c;
+      slot.a = alpha;
+      this.lampCount++;
+    }
+  }
+
+  /**
+   * Paint every queued lamp additively: a hot core inside a soft halo.  Two
+   * rectangles per lamp reads as a glow at this scale and costs nothing next
+   * to a real blur.
+   */
+  _flushLamps() {
+    if (this.lampCount === 0) return;
+    const ctx = this.ctx;
+    const strength = clamp(this.night * 2.0, 0.25, 1);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < this.lampCount; i++) {
+      const L = this.lamps[i];
+      ctx.globalAlpha = clamp(0.28 * strength * L.a, 0, 1);
+      ctx.fillStyle = L.c;
+      ctx.fillRect(
+        Math.round(L.x - L.w * 0.8), Math.round(L.y - L.h * 0.9),
+        Math.round(L.w * 2.6), Math.round(L.h * 2.8),
+      );
+      ctx.globalAlpha = clamp(0.9 * strength * L.a, 0, 1);
+      ctx.fillRect(Math.round(L.x), Math.round(L.y), Math.round(L.w), Math.round(L.h));
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   _drawDynamic(g, seg, item) {
@@ -414,7 +481,7 @@ export class Renderer {
     if (seg.p1.camera.z < SPRITE_NEAR_Z * 0.5) return;
     if (p.scale <= 0) return;
     const fullW = p.scale * K.ROAD_WIDTH * HALF_W;
-    const size = clamp(Math.round(p.scale * BULLET_WORLD_W * b.size * HALF_W), 1, 24);
+    const size = clamp(Math.round(p.scale * BULLET_WORLD_W * b.size * HALF_W), R, 24 * R);
     const x = Math.round(p.x + fullW * b.x);
     const y = Math.round(p.y - p.scale * b.y * H * 0.5);
     const ctx = this.ctx;
@@ -422,7 +489,7 @@ export class Renderer {
     ctx.fillStyle = b.hostile ? UI.red : UI.yellow;
     ctx.fillRect(x - (size >> 1), y - size, Math.max(1, size), Math.max(2, size * 2));
     ctx.fillStyle = UI.white;
-    ctx.fillRect(x - 1, y - size, 2, Math.max(1, size));
+    ctx.fillRect(x - (R >> 1), y - size, Math.max(1, R), Math.max(1, size));
   }
 
   _drawParticle(seg, p0) {
@@ -430,7 +497,7 @@ export class Renderer {
     if (seg.p1.camera.z < SPRITE_NEAR_Z * 0.5) return;
     if (p.scale <= 0) return;
     const fullW = p.scale * K.ROAD_WIDTH * HALF_W;
-    const s = clamp(Math.round(p.scale * PARTICLE_WORLD_W * p0.size * HALF_W), 1, 40);
+    const s = clamp(Math.round(p.scale * PARTICLE_WORLD_W * p0.size * HALF_W), R, 40 * R);
     const x = Math.round(p.x + fullW * p0.x);
     const y = Math.round(p.y - p.scale * p0.y * H * 0.5);
     if (y > seg.clip) return;
@@ -444,45 +511,55 @@ export class Renderer {
   _drawFloater(seg, f) {
     const p = seg.p1.screen;
     if (seg.p1.camera.z < SPRITE_NEAR_Z * 0.5) return;
-    if (p.scale <= 0 || p.w < 6) return;
+    if (p.scale <= 0 || p.w < 6 * R) return;
     const fullW = p.scale * K.ROAD_WIDTH * HALF_W;
     const x = Math.round(p.x + fullW * f.x);
     const y = Math.round(p.y - p.scale * f.y * H * 0.5);
     if (y > seg.clip || y < -10) return;
     const ctx = this.ctx;
     ctx.globalAlpha = clamp(f.life / f.maxLife, 0, 1);
-    textCenteredShadow(ctx, f.text, x, y, f.color, 1);
+    textCenteredShadow(ctx, f.text, x, y, f.color, R);
     ctx.globalAlpha = 1;
   }
 
   // ---------------------------------------------------------------- player
 
+  /**
+   * The van.
+   *
+   * Size and screen position come from the projection at the van's own depth
+   * rather than from hardcoded screen fractions, so CAMERA_HEIGHT and
+   * PLAYER_PULLBACK in config.js genuinely control the framing: pull the
+   * camera back and the van shrinks and rises up the frame exactly as a real
+   * one would.  Its depth is constant, so all of this is precomputed.
+   */
   _drawPlayer(g, seg, theme) {
     const ctx = this.ctx;
+    const speedFrac = g.speed / K.MAX_SPEED;
     const bounce = g.speed > 0
-      ? Math.sin(g.time * 26) * 1.2 * (g.speed / K.MAX_SPEED) * (g.offRoad ? 2.6 : 0.6)
+      ? Math.sin(g.time * 26) * 1.2 * R * speedFrac * (g.offRoad ? 2.6 : 0.6)
       : 0;
     const frame = clamp(Math.round(g.steerVisual * 2) + 2, 0, 4);
     const spr = SPR.van[frame];
 
-    // The van is drawn at a fixed size at a fixed place: it is the camera's
-    // anchor, not a world object.
-    // Sized and placed so the van's wheels sit just above the HUD panel:
-    // any lower and the shadow disappears behind it and the van looks like
-    // it is floating.
-    const destW = Math.round(W * 0.285);
+    const roadHalfPx = K.PLAYER_SCALE * K.ROAD_WIDTH * (W / 2);
+    const destW = Math.round(spr.worldW * roadHalfPx);
     const destH = Math.round(destW * spr.aspect);
-    let destX = Math.round(W / 2 - destW / 2);
-    const destY = Math.round(H - 28 - destH + bounce);
+    const groundY = Math.round(K.PLAYER_GROUND_Y + bounce);
+    const destY = groundY - destH;
 
-    // Curve lean: the van visually drifts against the corner.
-    const curveLean = Math.round(-seg.curve * 1.6 - g.steerVisual * 3);
-    destX += curveLean;
+    // The camera tracks playerX, so the van is always horizontally centred;
+    // the only lateral movement is a small visual lean into the corner.
+    const lean = Math.round((-seg.curve * 1.1 - g.steerVisual * 2.2) * R);
+    const destX = Math.round(W / 2 - destW / 2) + lean;
+
+    // Headlights, before the van so the beams read as coming from under it.
+    if (theme.dark > 0.08) this._drawHeadlights(g, theme, destX, destW, groundY);
 
     // Ground shadow, drawn flat and unrotated: a shadow that spins with a
     // wrecking van reads as a black wedge stuck to the bodywork.
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(destX + 4, destY + destH - 3, destW - 8, 4);
+    ctx.fillRect(destX + 3 * R, groundY - 2 * R, destW - 6 * R, 3 * R);
 
     // Blink while invulnerable, but never blink out entirely.
     if (g.invulnTimer > 0 && Math.floor(g.time * 18) % 2 === 0 && g.crashTimer <= 0) {
@@ -501,12 +578,21 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
 
+    // Brake lights.
+    if (g.braking) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255,60,20,0.75)';
+      ctx.fillRect(destX + destW * 0.06, destY + destH * 0.26, destW * 0.12, destH * 0.34);
+      ctx.fillRect(destX + destW * 0.82, destY + destH * 0.26, destW * 0.12, destH * 0.34);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
     // Electro Shield bubble.
     if (g.shieldTimer > 0) {
-      const pulse = 2 + Math.sin(g.time * 16) * 1.5;
+      const pulse = (2 + Math.sin(g.time * 16) * 1.5) * R;
       ctx.strokeStyle = g.shieldTimer < 2 && Math.floor(g.time * 10) % 2 === 0
         ? UI.white : UI.cyan;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = R;
       ctx.strokeRect(
         Math.round(destX - pulse), Math.round(destY - pulse),
         Math.round(destW + pulse * 2), Math.round(destH + pulse * 2),
@@ -515,10 +601,10 @@ export class Renderer {
 
     // Nitro flame out the back.
     if (g.nitroTimer > 0) {
-      const fl = 4 + Math.random() * 7;
+      const fl = (4 + Math.random() * 7) * R;
       ctx.fillStyle = Math.random() < 0.5 ? UI.yellow : UI.red;
-      ctx.fillRect(destX + destW * 0.30, destY + destH - 2, destW * 0.14, fl);
-      ctx.fillRect(destX + destW * 0.56, destY + destH - 2, destW * 0.14, fl);
+      ctx.fillRect(destX + destW * 0.30, groundY - 2 * R, destW * 0.14, fl);
+      ctx.fillRect(destX + destW * 0.56, groundY - 2 * R, destW * 0.14, fl);
     }
 
     // Dust plume when you put two wheels on the shoulder.  Kicked up around
@@ -527,12 +613,12 @@ export class Renderer {
     if (g.offRoad && g.speed > 200) {
       ctx.fillStyle = mix(theme.ground[0], UI.white, 0.35);
       ctx.globalAlpha = 0.5;
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 12; i++) {
         const side = Math.random() < 0.5 ? -1 : 1;
         const px = destX + destW / 2 + side * (destW * 0.34 + Math.random() * destW * 0.30);
-        const py = destY + destH - Math.random() * 12;
-        const s = 1 + Math.random() * 3;
-        ctx.fillRect(px | 0, py | 0, s, s);
+        const py = groundY - Math.random() * 10 * R;
+        const sz = (1 + Math.random() * 3) * R;
+        ctx.fillRect(px | 0, py | 0, sz, sz);
       }
       ctx.globalAlpha = 1;
     }
@@ -543,29 +629,50 @@ export class Renderer {
     const spr = SPR.plane;
     const r = g.rescue;
     const scale = 0.62;
-    const destW = Math.round(W * 0.22 * scale + 34);
+    const destW = Math.round(W * 0.22 * scale + 34 * R);
     const destH = Math.round(destW * spr.aspect);
     const destX = Math.round(W / 2 + r.x * (W * 0.38) - destW / 2);
     const destY = Math.round(H * 0.10 + r.y * 26);
     ctx.drawImage(spr.canvas, destX, destY, destW, destH);
   }
 
-  _drawHeadlights(theme) {
-    // Two cones of light on the road ahead.  Cheap, but it sells the dark.
+  /**
+   * Headlight beams.
+   *
+   * Two cones springing from the van's own lamps and falling off up the road,
+   * plus a bright pool right in front of the bumper.  Drawn additively so
+   * they brighten whatever they land on instead of fogging it.
+   */
+  _drawHeadlights(g, theme, vanX, vanW, groundY) {
     const ctx = this.ctx;
-    const cx = W / 2;
-    const top = H * 0.46;
-    const grad = ctx.createLinearGradient(0, H, 0, top);
-    grad.addColorStop(0, `rgba(255,246,200,${0.20 + theme.dark * 0.30})`);
-    grad.addColorStop(1, 'rgba(255,246,200,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(cx - 26, H);
-    ctx.lineTo(cx + 26, H);
-    ctx.lineTo(cx + 34, top);
-    ctx.lineTo(cx - 34, top);
-    ctx.closePath();
-    ctx.fill();
+    const reach = H * 0.30;
+    const strength = 0.16 + theme.dark * 0.55;
+    const flicker = 1 - Math.random() * 0.05;
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (const side of [-1, 1]) {
+      const lx = vanX + vanW / 2 + side * vanW * 0.34;
+      const grad = ctx.createLinearGradient(0, groundY, 0, groundY - reach);
+      grad.addColorStop(0, `rgba(255,244,196,${(strength * flicker).toFixed(3)})`);
+      grad.addColorStop(0.45, `rgba(255,240,180,${(strength * 0.45).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(255,240,180,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(lx - vanW * 0.16, groundY);
+      ctx.lineTo(lx + vanW * 0.16, groundY);
+      ctx.lineTo(lx + vanW * 0.95, groundY - reach);
+      ctx.lineTo(lx - vanW * 0.95, groundY - reach);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Hot pool directly ahead of the bumper.
+    const pool = ctx.createLinearGradient(0, groundY, 0, groundY - reach * 0.34);
+    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.7).toFixed(3)})`);
+    pool.addColorStop(1, 'rgba(255,248,214,0)');
+    ctx.fillStyle = pool;
+    ctx.fillRect(vanX - vanW * 0.35, groundY - reach * 0.34, vanW * 1.7, reach * 0.34);
+    ctx.globalCompositeOperation = 'source-over';
+    void g;
   }
 }
 

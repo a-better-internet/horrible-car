@@ -14,6 +14,9 @@
 import { SEG_LENGTH, SCORE } from './config.js';
 import { SPR } from './sprites.js';
 
+/** Themes dark enough to want street lighting. */
+const NIGHT_THEMES = new Set(['dusk', 'night', 'fog']);
+
 /** Fixed-size pool of plain objects; never grows during play. */
 export class Pool {
   /**
@@ -161,11 +164,34 @@ export function makeTurret(x, z) {
 
 // ------------------------------------------------------------ stage contents
 
+/*
+ * Roadside furniture, with weights.
+ *
+ * Billboards used to be as common as trees, which made the highway read as a
+ * six-mile advertising hoarding.  They are now rare enough to be an event,
+ * and there are six designs so the ones you do pass are not obviously the
+ * same board again.
+ */
 const SCENERY = [
-  { sprite: 'tree', solid: true }, { sprite: 'treeDark', solid: true },
-  { sprite: 'rock', solid: true }, { sprite: 'sign', solid: true },
-  { sprite: 'billboard', solid: false }, { sprite: 'pylon', solid: false },
+  { sprite: 'tree', solid: true, weight: 26 },
+  { sprite: 'treeDark', solid: true, weight: 20 },
+  { sprite: 'rock', solid: true, weight: 14 },
+  { sprite: 'sign', solid: true, weight: 8 },
+  { sprite: 'pylon', solid: false, weight: 9 },
+  { sprite: 'billboard', solid: false, weight: 2, variants: 6, minGap: 44 },
 ];
+
+const SCENERY_TOTAL = SCENERY.reduce((n, p) => n + p.weight, 0);
+
+/** Weighted pick from SCENERY. */
+function pickScenery(rng) {
+  let roll = rng.next() * SCENERY_TOTAL;
+  for (const item of SCENERY) {
+    roll -= item.weight;
+    if (roll <= 0) return item;
+  }
+  return SCENERY[0];
+}
 
 /**
  * Fill a track with static props, pickups and hazards, and build the enemy
@@ -179,7 +205,9 @@ const SCENERY = [
 export function populateTrack(track, stage, rng) {
   const segs = track.segments;
   const finish = track.finishIndex;
-  const t = Math.min(1, (stage - 1) / 49);
+  // Same eased ramp the road geometry uses, so length and threat rise
+  // together rather than one outpacing the other.
+  const t = Math.pow(Math.min(1, (stage - 1) / 49), 1.35);
 
   const add = (segIndex, obj) => {
     const s = segs[Math.max(0, Math.min(segs.length - 1, segIndex))];
@@ -189,16 +217,43 @@ export function populateTrack(track, stage, rng) {
   };
 
   // ---- roadside scenery ------------------------------------------------
-  // Denser near the start so the sense of speed reads immediately.
+  // Minimum spacing for anything that declares one.  Without it two
+  // billboards can land three segments apart and read as a single hoarding.
+  const lastAt = new Map();
   for (let n = 12; n < segs.length - 4; n += rng.int(2, 6)) {
     const side = rng.chance(0.5) ? -1 : 1;
-    const pick = rng.pick(SCENERY);
+    let pick = pickScenery(rng);
+    if (pick.minGap && n - (lastAt.get(pick.sprite) ?? -1e9) < pick.minGap) {
+      pick = SCENERY[0];
+    }
+    lastAt.set(pick.sprite, n);
     const dist = rng.range(1.30, 2.70);
+    let sprite = pick.variants ? `${pick.sprite}${rng.int(0, pick.variants - 1)}` : pick.sprite;
+    // After dark, use the shaded foliage: a full-brightness summer tree at
+    // midnight reads as a cutout pasted over the scene.
+    if (sprite === 'tree' && NIGHT_THEMES.has(track.theme)) sprite = 'treeDark';
     add(n, {
-      kind: 'prop', sprite: pick.sprite, x: side * dist,
-      w: SPR[pick.sprite] ? SPR[pick.sprite].worldW : 0.4,
+      kind: 'prop', sprite, x: side * dist,
+      w: SPR[sprite] ? SPR[sprite].worldW : 0.4,
       solid: pick.solid && dist < 2.05, hp: 0, dead: false,
     });
+  }
+
+  // ---- streetlights ----------------------------------------------------
+  // Only after dark, where they are the difference between a road and a
+  // black rectangle.  Alternating sides, evenly spaced, arms over the road.
+  if (NIGHT_THEMES.has(track.theme)) {
+    let side = 1;
+    for (let n = 20; n < segs.length - 4; n += 26) {
+      add(n, {
+        // The pole stands on the shoulder and the arm reaches IN over the
+        // road, so the sprite whose arm points left goes on the right verge.
+        kind: 'prop', sprite: side > 0 ? 'streetlightR' : 'streetlight',
+        x: side * 1.42, w: SPR.streetlight.worldW,
+        solid: false, hp: 0, dead: false, yWorld: 0,
+      });
+      side = -side;
+    }
   }
 
   // Cones and barriers hugging the tarmac -- these you can actually hit.
@@ -217,7 +272,7 @@ export function populateTrack(track, stage, rng) {
   // Spacing tightens the further into the rally you are, because the drain
   // rate rises too; running the tank dry is the only way to lose.
   let globes = 0;
-  const globeGap = Math.round(104 - t * 26);
+  const globeGap = Math.round(100 - t * 22);
   for (let n = 70; n < finish - 24; n += globeGap + rng.int(-14, 14)) {
     const lane = rng.range(-0.72, 0.72);
     add(n, {
@@ -228,8 +283,8 @@ export function populateTrack(track, stage, rng) {
   }
 
   // ---- mines and turrets ----------------------------------------------
-  if (stage >= 3) {
-    const mineCount = Math.round(4 + t * 22);
+  if (stage >= 4) {
+    const mineCount = Math.round(2 + t * 30);
     for (let i = 0; i < mineCount; i++) {
       const n = rng.int(90, Math.max(95, finish - 20));
       add(n, {
@@ -238,8 +293,8 @@ export function populateTrack(track, stage, rng) {
       });
     }
   }
-  if (stage >= 4) {
-    const turretCount = Math.round(1 + t * 9);
+  if (stage >= 6) {
+    const turretCount = Math.round(1 + t * 13);
     for (let i = 0; i < turretCount; i++) {
       const n = rng.int(110, Math.max(120, finish - 30));
       const side = rng.chance(0.5) ? -1 : 1;
@@ -260,20 +315,22 @@ export function populateTrack(track, stage, rng) {
   // together.  Tuned so stage 1 keeps 3-5 cars on screen and stage 50 keeps
   // the road more or less permanently occupied.
   const spawns = [];
-  const density = 0.80 + t * 0.90;
+  const density = 0.62 + t * 1.20;
   const firstEnemy = 50;
   let n = firstEnemy;
   while (n < finish - 20) {
     n += Math.max(4, Math.round(rng.range(9, 22) / density));
     if (n >= finish - 20) break;
 
+    // The mix shifts from mostly civilian traffic and slow chasers toward
+    // ramming coupes, cycles and mine-laying command trucks.
     const roll = rng.next();
     let type;
-    if (roll < 0.10 + t * 0.05) type = 'civic';
-    else if (roll < 0.20 + t * 0.05) type = 'oncoming';
-    else if (roll < 0.55) type = 'sedan';
-    else if (roll < 0.78 + t * 0.05) type = 'coupe';
-    else if (roll < 0.92) type = 'cycle';
+    if (roll < 0.16 - t * 0.08) type = 'civic';
+    else if (roll < 0.26 - t * 0.08) type = 'oncoming';
+    else if (roll < 0.62 - t * 0.16) type = 'sedan';
+    else if (roll < 0.82 - t * 0.04) type = 'coupe';
+    else if (roll < 0.93) type = 'cycle';
     else type = 'command';
 
     // Cars in the opposite direction belong on the far side of the road.
@@ -281,7 +338,7 @@ export function populateTrack(track, stage, rng) {
     spawns.push({ z: n * SEG_LENGTH, type, x, used: false });
 
     // Packs: later stages send cars in twos and threes.
-    if (stage > 8 && rng.chance(0.24 + t * 0.2)) {
+    if (stage > 6 && rng.chance(0.16 + t * 0.34)) {
       const nz = n + rng.int(4, 10);
       if (nz < finish - 20) {
         spawns.push({

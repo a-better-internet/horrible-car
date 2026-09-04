@@ -174,10 +174,17 @@ function frame(now) {
 
   // ---- draw ------------------------------------------------------------
   renderer.render(game, dt);
+
+  // The HUD is authored in original-raster (320x240) units and scaled up.
+  // Drawing it through a transform keeps every layout constant in one
+  // coordinate system, and because the font is built from rectangles it
+  // lands on exact pixel boundaries at integer scales.
+  ctx.save();
+  ctx.scale(K.UI_SCALE, K.UI_SCALE);
   hud.render(game, paused);
   if (showDebug) drawDebug();
   if (audio.muted) drawMuted();
-
+  ctx.restore();
   input.endFrame();
 
   // Fade the keyboard hint out once the player is clearly playing.
@@ -201,7 +208,7 @@ function drawDebug() {
 }
 
 function drawMuted() {
-  text(ctx, 'MUTE', K.SCREEN_W - 26, 24, UI.dim, 1);
+  text(ctx, 'MUTE', K.BASE_W - 26, 24, UI.dim, 1);
 }
 
 // Draw one frame immediately so the title screen appears before any input.
