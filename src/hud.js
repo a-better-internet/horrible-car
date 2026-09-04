@@ -76,21 +76,46 @@ export class Hud {
     textRight(ctx, commas(Math.floor(g.highScore)), W - 4, 10, UI.yellow, 1);
 
     // ---- fuel ------------------------------------------------------------
-    // Fuel is the whole game: it is the timer, the health bar and the
-    // end-of-stage bonus, so it gets the most prominent slot on screen.
-    const frac = g.fuel / K.FUEL_MAX;
-    const critical = g.fuel < 20;
+    // Two tanks, as the cabinet showed them.  The reserve sits to the right
+    // of the main gauge and only lights up when you are actually on it, so
+    // the switchover is impossible to miss at 200 mph.
+    const critical = g.onReserve || g.fuel < 18;
     const blink = critical && Math.floor(g.time * 8) % 2 === 0;
-    const fuelColor = g.fuel < 10 ? UI.red : g.fuel < 30 ? UI.amber : UI.green;
+    const mainFrac = g.fuel / K.FUEL_MAX;
+    const resFrac = g.reserve / K.RESERVE_MAX;
+    const mainColor = g.fuel < 20 ? UI.amber : UI.green;
+    const resColor = g.reserve < 10 ? UI.red : UI.amber;
 
     text(ctx, 'FUEL', 4, H - 22, blink ? UI.red : UI.grey, 1);
-    text(ctx, `${pad(Math.ceil(g.fuel), 3)}`, 30, H - 22, blink ? UI.red : UI.white, 1);
-    bar(ctx, 4, H - 12, 108, 7, frac, blink ? UI.white : fuelColor, '#000', UI.dim);
+    text(ctx, `${pad(Math.ceil(g.totalFuel), 3)}`, 30, H - 22, blink ? UI.red : UI.white, 1);
+    bar(ctx, 4, H - 12, 74, 7, mainFrac,
+      g.onReserve ? UI.dim : (blink ? UI.white : mainColor), '#000', UI.dim);
+
+    // The reserve reads as full-but-idle when you are not on it: showing it
+    // dark made a full reserve look like an empty one.
+    text(ctx, 'RES', 84, H - 22, g.onReserve ? (blink ? UI.red : UI.amber) : UI.grey, 1);
+    bar(ctx, 84, H - 12, 34, 7, resFrac,
+      g.onReserve ? (blink ? UI.white : resColor) : 'rgba(190,120,40,0.55)', '#000', UI.dim);
 
     // ---- speed -----------------------------------------------------------
     const mph = Math.max(0, g.mph);
     textRight(ctx, `${pad(mph, 3)}`, W - 24, H - 22, g.nitroTimer > 0 ? UI.cyan : UI.white, 2);
     textRight(ctx, 'MPH', W - 3, H - 16, UI.grey, 1);
+
+    // ---- multiplier ------------------------------------------------------
+    // Kills and clean passes build it; a wreck takes it away.
+    const mx = 126;
+    const mCol = g.multiplier >= 6 ? UI.magenta
+      : g.multiplier >= 3 ? UI.yellow
+        : g.multiplier >= 2 ? UI.amber : UI.grey;
+    text(ctx, 'MULT', mx, H - 22, mCol, 1);
+    text(ctx, `X${g.multiplier}`, mx + 28, H - 23, mCol, 2);
+    // Progress toward the next step.
+    if (g.multiplier < K.MULTIPLIER_MAX) {
+      bar(ctx, mx, H - 10, 40, 3, g.chain / K.CHAIN_PER_LEVEL, mCol, '#000', 'rgba(0,0,0,0.5)');
+    } else {
+      text(ctx, 'MAX', mx, H - 11, UI.magenta, 1);
+    }
 
     // ---- weapon / ordnance ----------------------------------------------
     text(ctx, g.weapon.short, 4, H - 50, UI.cyan, 1);
@@ -125,8 +150,10 @@ export class Hud {
     ctx.fillRect(Math.round(4 + (W - 8) * clamp(g.progress, 0, 1)) - 1, py - 1, 2, 5);
 
     // ---- warnings --------------------------------------------------------
-    if (critical && Math.floor(g.time * 4) % 2 === 0 && g.state === STATE.PLAY) {
-      textCenteredShadow(ctx, 'LOW FUEL', W / 2, 30, UI.red, 1);
+    if (g.reserveAnnounce > 0 && Math.floor(g.time * 6) % 2 === 0) {
+      textCenteredShadow(ctx, 'MAIN TANK DRY -- ON RESERVE', W / 2, 30, UI.red, 1);
+    } else if (critical && Math.floor(g.time * 4) % 2 === 0 && g.state === STATE.PLAY) {
+      textCenteredShadow(ctx, g.onReserve ? 'RESERVE FUEL' : 'LOW FUEL', W / 2, 30, UI.red, 1);
     }
     if (g.offRoad && g.state === STATE.PLAY && Math.floor(g.time * 6) % 2 === 0) {
       textCenteredShadow(ctx, 'GET BACK ON THE ROAD', W / 2, 40, UI.amber, 1);
@@ -182,9 +209,11 @@ export class Hud {
     textCenteredShadow(ctx, `FINAL SCORE  ${commas(Math.floor(g.score))}`, W / 2, 100, UI.white, 1);
     textCenteredShadow(ctx, `KILLS ${g.stats.kills}   GLOBES ${g.stats.globes}   WRECKS ${g.stats.crashes}`,
       W / 2, 112, UI.grey, 1);
+    textCenteredShadow(ctx, `CLOSE PASSES ${g.stats.nearMisses}   BEST MULTIPLIER X${g.stats.best}`,
+      W / 2, 122, UI.grey, 1);
     if (Math.floor(g.score) >= g.highScore && g.score > 0) {
       if (Math.floor(g.time * 4) % 2 === 0) {
-        textCenteredShadow(ctx, 'NEW HIGH SCORE', W / 2, 128, UI.yellow, 1);
+        textCenteredShadow(ctx, 'NEW HIGH SCORE', W / 2, 136, UI.yellow, 1);
       }
     }
     if (g.gameOverTimer < 5.2 && Math.floor(g.time * 2) % 2 === 0) {

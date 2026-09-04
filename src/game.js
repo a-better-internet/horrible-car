@@ -71,11 +71,16 @@ export class Game {
     this.score = 0;
     this.stage = 1;
     this.fuel = K.FUEL_START;
+    this.reserve = K.RESERVE_START;
+    this.onReserve = false;
     this.weapon = K.WEAPONS.base;
     this.ammo = Infinity;
     this.missiles = K.CRUISE_MISSILE.startCount;
     this.nitroCharges = 0;
-    this.stats = { kills: 0, globes: 0, crashes: 0, distance: 0 };
+    this.multiplier = 1;
+    this.chain = 0;
+    this.chainTimer = 0;
+    this.stats = { kills: 0, globes: 0, crashes: 0, distance: 0, nearMisses: 0, best: 1 };
     this.loadStage(1);
     this.state = STATE.READY;
     this.readyTimer = 2.6;
@@ -103,6 +108,7 @@ export class Game {
     this.shieldTimer = 0;
     this.nitroTimer = 0;
     this.fireCooldown = 0;
+    this.muzzleFlash = 0;
     this.offRoad = false;
     this.braking = false;
     this.rumble = 0;
@@ -118,10 +124,14 @@ export class Game {
       nextAt: K.RESCUE.firstAt,
     };
 
-    this.stageStartFuel = this.fuel;
+    this.stageStartFuel = this.totalFuel;
     this.lowFuelBeep = 0;
+    this.reserveAnnounce = 0;
     this.finished = false;
   }
+
+  /** Everything left in both tanks. */
+  get totalFuel() { return this.fuel + this.reserve; }
 
   /** Progress through the current stage, 0..1. */
   get progress() {
@@ -149,6 +159,8 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 5.5);
     this.flash = Math.max(0, this.flash - dt * 4.2);
     this._boomCooldown = Math.max(0, this._boomCooldown - dt);
+    this.reserveAnnounce = Math.max(0, (this.reserveAnnounce || 0) - dt);
+    this.muzzleFlash = Math.max(0, (this.muzzleFlash || 0) - dt);
 
     switch (this.state) {
       case STATE.ATTRACT: this._updateAttract(dt); break;
@@ -216,7 +228,8 @@ export class Game {
         this.audio.fanfare();
         this._commitHighScore();
       } else {
-        this.fuel = clamp(this.fuel + K.FUEL_STAGE_BONUS, 0, K.FUEL_MAX);
+        this.refuel(K.FUEL_STAGE_BONUS);
+        this.reserve = clamp(this.reserve + K.RESERVE_STAGE_BONUS, 0, K.RESERVE_MAX);
         this.loadStage(this.stage + 1);
         this.state = STATE.READY;
         this.readyTimer = 2.4;
@@ -306,17 +319,28 @@ export class Game {
 
     // ---- fuel -----------------------------------------------------------
     const drainScale = 1 + ((this.stage - 1) / 49) * 0.4;
-    this.fuel -= (K.FUEL_IDLE_DRAIN + K.FUEL_SPEED_DRAIN * speedPct) * drainScale * dt;
-    if (this.fuel <= 0) {
-      this.fuel = 0;
-      this._endGame();
-      return;
-    }
-    if (this.fuel < 20) {
+    this.burn((K.FUEL_IDLE_DRAIN + K.FUEL_SPEED_DRAIN * speedPct) * drainScale * dt);
+    if (this.state !== STATE.PLAY) return;
+
+    // On the reserve everything gets louder and more frequent: it is the
+    // last stretch and it should feel like it.
+    const warn = this.onReserve || this.fuel < 18;
+    if (warn) {
       this.lowFuelBeep -= dt;
       if (this.lowFuelBeep <= 0) {
-        this.lowFuelBeep = this.fuel < 10 ? 0.42 : 0.85;
+        this.lowFuelBeep = this.onReserve ? (this.reserve < 10 ? 0.34 : 0.55) : 0.85;
         this.audio.lowFuel();
+      }
+    }
+
+    // ---- multiplier decay ------------------------------------------------
+    if (this.chainTimer > 0) {
+      this.chainTimer -= dt;
+      if (this.chainTimer <= 0 && this.multiplier > 1) {
+        this.multiplier -= 1;
+        this.chain = 0;
+        this.chainTimer = this.multiplier > 1 ? K.CHAIN_TIMEOUT : 0;
+        this.audio.uiBlip(false);
       }
     }
 
@@ -367,11 +391,76 @@ export class Game {
     }
   }
 
+  // ------------------------------------------------------------------- fuel
+
+  /**
+   * Spend fuel: the main tank first, then the reserve.  Crossing onto the
+   * reserve is announced once, loudly.
+   */
+  burn(amount) {
+    let left = amount;
+    if (this.fuel > 0) {
+      const take = Math.min(this.fuel, left);
+      this.fuel -= take;
+      left -= take;
+      if (this.fuel <= 0 && !this.onReserve) {
+        this.fuel = 0;
+        this.onReserve = true;
+        this.reserveAnnounce = 2.6;
+        this.audio.slidingDoor();
+        this.floater(this.playerX, this.position + 700, 'ON RESERVE', '#ff5533');
+      }
+    }
+    if (left > 0) this.reserve = Math.max(0, this.reserve - left);
+    if (this.totalFuel <= 0) {
+      this.fuel = 0;
+      this.reserve = 0;
+      this._endGame();
+    }
+  }
+
+  /** Add fuel: fills the main tank first, then tops up the reserve. */
+  refuel(amount) {
+    let left = amount;
+    const room = K.FUEL_MAX - this.fuel;
+    const into = Math.min(room, left);
+    this.fuel += into;
+    left -= into;
+    if (left > 0) this.reserve = Math.min(K.RESERVE_MAX, this.reserve + left);
+    if (this.fuel > 0) this.onReserve = false;
+  }
+
   // ---------------------------------------------------------------- scoring
 
   addScore(n) {
     this.score += n;
     if (this.score > this.highScore) this.highScore = Math.floor(this.score);
+  }
+
+  /**
+   * Register a hit or a clean pass.  Every CHAIN_PER_LEVEL of them steps the
+   * multiplier up; a wreck takes the whole thing back to 1.
+   */
+  chainHit(n = 1) {
+    this.chain += n;
+    this.chainTimer = K.CHAIN_TIMEOUT;
+    while (this.chain >= K.CHAIN_PER_LEVEL && this.multiplier < K.MULTIPLIER_MAX) {
+      this.chain -= K.CHAIN_PER_LEVEL;
+      this.multiplier += 1;
+      this.stats.best = Math.max(this.stats.best, this.multiplier);
+      this.audio.uiBlip(true);
+      this.floater(this.playerX, this.position + 900, `x${this.multiplier}`, '#ffee55');
+    }
+    if (this.multiplier >= K.MULTIPLIER_MAX) this.chain = 0;
+  }
+
+  /** Lose the chain.  Called on any wreck. */
+  breakChain() {
+    if (this.multiplier > 1 || this.chain > 0) {
+      this.multiplier = 1;
+      this.chain = 0;
+      this.chainTimer = 0;
+    }
   }
 
   _commitHighScore() {
@@ -383,7 +472,7 @@ export class Game {
     this.finished = true;
     this.state = STATE.STAGE_END;
     this.stageEndTimer = 2.6;
-    this.bonusFuel = this.fuel;
+    this.bonusFuel = this.totalFuel;
     this.addScore(K.SCORE.stageClear);
     this.audio.stopMusic();
     this.audio.fanfare();
@@ -423,6 +512,7 @@ export class Game {
       b.hostile = false;
       b.size = w.id === 'base' ? 1 : 1.2;
     }
+    this.muzzleFlash = 0.06;
     if (this.ammo !== Infinity) {
       this.ammo -= 1;
       if (this.ammo <= 0) { this._setWeapon(K.WEAPONS.base); this.audio.uiBlip(false); }
@@ -548,6 +638,22 @@ export class Game {
           break;
       }
 
+      // Near miss: the moment the van goes past a car it did not hit.  This
+      // is what makes weaving through traffic worth more than shooting a hole
+      // in it, and it feeds the same chain that kills do.
+      if (!e.passed && e.z < this.position) {
+        e.passed = true;
+        if (!attract && Math.abs(e.x - this.playerX) < K.NEAR_MISS_X
+            && this.crashTimer <= 0) {
+          const pts = K.SCORE.nearMiss * this.multiplier;
+          this.addScore(pts);
+          this.stats.nearMisses++;
+          this.chainHit();
+          this.audio.uiBlip(true);
+          this.floater(e.x, this.position + 400, 'CLOSE', '#66ddff');
+        }
+      }
+
       if (e.z < behind || e.z > ahead) {
         this.enemies.splice(i, 1);
       }
@@ -596,9 +702,11 @@ export class Game {
     const e = this.enemies[i];
     this.enemies.splice(i, 1);
     this.explode(e.x, e.z, e.def.w * 2.4);
-    this.addScore(e.def.score);
+    const points = e.def.score * this.multiplier;
+    this.addScore(points);
     this.stats.kills++;
-    if (!silentScore) this.floater(e.x, e.z, `${e.def.score}`, '#ffdd55');
+    this.chainHit();
+    if (!silentScore) this.floater(e.x, e.z, `${points}`, '#ffdd55');
   }
 
   // ---------------------------------------------------------------- bullets
@@ -648,10 +756,11 @@ export class Game {
         if (obj.hp <= 0) {
           obj.dead = true;
           this.explode(obj.x, obj.z, obj.kind === 'turret' ? 1.1 : 0.7);
-          const s = obj.score || K.SCORE.mine;
-          this.addScore(s);
-          this.floater(obj.x, obj.z, `${s}`, '#ffdd55');
+          const pts = (obj.score || K.SCORE.mine) * this.multiplier;
+          this.addScore(pts);
+          this.floater(obj.x, obj.z, `${pts}`, '#ffdd55');
           this.stats.kills++;
+          this.chainHit();
         }
       });
     });
@@ -682,7 +791,7 @@ export class Game {
       switch (obj.kind) {
         case 'globe':
           obj.dead = true;
-          this.fuel = clamp(this.fuel + K.FUEL_GLOBE, 0, K.FUEL_MAX);
+          this.refuel(K.FUEL_GLOBE);
           this.addScore(K.SCORE.globe);
           this.stats.globes++;
           this.audio.pickup();
@@ -759,7 +868,7 @@ export class Game {
         this.spark(b.x, b.z);
         return;
       }
-      this.fuel = Math.max(0, this.fuel - K.FUEL_SHOT);
+      this.burn(K.FUEL_SHOT);
       this.invulnTimer = 0.55;
       this.shake = Math.max(this.shake, 0.5);
       this.spark(b.x, b.z);
@@ -788,7 +897,8 @@ export class Game {
     this.invulnTimer = K.CRASH_SPIN_TIME + K.INVULN_AFTER_CRASH;
     this.spinVel = (Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 4);
     this.speed *= K.CRASH_SPEED_KEEP;
-    this.fuel = Math.max(0, this.fuel - K.FUEL_CRASH * severity);
+    this.burn(K.FUEL_CRASH * severity);
+    this.breakChain();
     this.stats.crashes++;
     this.shake = 1;
     this.flash = 0.6;
@@ -805,12 +915,11 @@ export class Game {
       -K.MAX_OFF_ROAD_X, K.MAX_OFF_ROAD_X);
     this.speed *= 1 - 0.14 * severity;
     if (this.invulnTimer <= 0) {
-      this.fuel = Math.max(0, this.fuel - K.FUEL_SIDESWIPE * severity);
+      this.burn(K.FUEL_SIDESWIPE * severity);
       this.invulnTimer = 0.5;
     }
     this.shake = Math.max(this.shake, 0.45 * severity);
     this.audio.scrape();
-    if (this.fuel <= 0) this._endGame();
   }
 
   // ------------------------------------------------------- rescue cruiser

@@ -88,7 +88,21 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
 // ------------------------------------------------------------------ the van
 
 /**
- * A 1994 Dodge Caravan from behind, at 88x80.
+ * A 1994 Dodge Caravan from behind, at 100x78.
+ *
+ * The shapes that identify a second-generation (1991-95) Caravan from this
+ * angle, in rough order of how much they matter:
+ *
+ *   - Full-height vertical taillights at the extreme corners, running from
+ *     the beltline all the way down to the bumper.  Nothing else on the road
+ *     looks like this.
+ *   - A wide, nearly vertical liftgate with a big rubber-framed window and a
+ *     single centre wiper.
+ *   - A recessed licence plate low and central, between the lights.
+ *   - A deep, full-width body-coloured bumper with a dark valance under it.
+ *   - Tyres that barely show: from directly behind you see the bottom corners
+ *     of them and nothing else.  Drawing them as big blocks was what made the
+ *     old sprite read as a safari truck.
  *
  * `lean` in [-1,1] shifts the body over its wheels so hard steering reads
  * visually even though the camera keeps the van centred.
@@ -96,101 +110,127 @@ const tri = (ctx, x1, y1, x2, y2, x3, y3, color) => {
 function drawCaravan(ctx, W, H, lean) {
   const bx = Math.round(lean * 4);
   const rx = Math.round(lean * 2);
+  const mid = W >> 1;
 
-  // Wheels stay planted; only the body leans.
-  for (const wx of [4, W - 22]) {
-    r(ctx, wx, H - 20, 18, 19, C.tyreDark);
-    r(ctx, wx + 1, H - 19, 16, 17, C.tyre);
-    r(ctx, wx + 3, H - 15, 12, 9, C.greyDark);      // hubcap
-    r(ctx, wx + 5, H - 13, 8, 5, C.chrome);
-    r(ctx, wx + 2, H - 18, 14, 3, C.tyreLit);
+  // Explicit horizontal bands, top to bottom.  Deriving these from H made it
+  // far too easy to land the licence plate on the bumper.
+  const RACK = 2;
+  const ROOF = 5;
+  const BELT = 14;        // top of the taillights and the glass surround
+  const GLASS_T = 17;
+  const GLASS_B = 35;
+  const SURROUND_B = 38;
+  const HANDLE = 39;
+  const PLATE_T = 42;
+  const PLATE_B = 51;
+  const BUMPER_T = 52;
+  const BUMPER_B = 66;
+  const VALANCE_B = 72;
+  const LIGHT_B = BUMPER_T;
+
+  // ---- tyres -----------------------------------------------------------
+  // Only the outer bottom corners show past the bodywork.  Drawing these as
+  // big blocks is what used to make the van read as a safari truck.
+  for (const wx of [3, W - 15]) {
+    r(ctx, wx + 1, 60, 10, 17, C.tyreDark);
+    r(ctx, wx, 63, 12, 14, C.tyreDark);
+    r(ctx, wx + 1, 64, 10, 12, C.tyre);
+    r(ctx, wx + 2, 70, 8, 5, C.greyDark);
+    r(ctx, wx + 3, 71, 6, 3, C.chromeDark);
   }
 
-  // Rocker panel and wheel arches.
-  r(ctx, 6 + bx, H - 26, W - 12, 10, C.tanDark);
-  rSym(ctx, W, 2 + bx, H - 28, 22, 6, C.tanShadow);
+  // ---- valance and bumper ---------------------------------------------
+  r(ctx, 8 + bx, BUMPER_B, W - 16, VALANCE_B - BUMPER_B, C.tanShadow);
+  r(ctx, 62 + bx, BUMPER_B + 2, 12, 4, C.chromeDark);   // exhaust cutout
+  r(ctx, 64 + bx, BUMPER_B + 3, 8, 2, C.black);
 
-  // Rear bumper: 1994 plastic, thoroughly scuffed.
-  r(ctx, 4 + bx, H - 32, W - 8, 9, C.chrome);
-  r(ctx, 4 + bx, H - 32, W - 8, 2, C.chromeLit);
-  r(ctx, 4 + bx, H - 25, W - 8, 2, C.chromeDark);
-  r(ctx, 16 + bx, H - 29, 12, 4, C.greyDark);       // scuffs
-  r(ctx, W - 30 + bx, H - 28, 14, 4, C.greyDark);
-  rSym(ctx, W, 8 + bx, H - 31, 4, 7, C.chromeDark); // bumper end caps
+  r(ctx, 1 + bx, BUMPER_T, W - 2, BUMPER_B - BUMPER_T, C.tanDark);
+  r(ctx, 1 + bx, BUMPER_T, W - 2, 3, C.tanMid);         // top face
+  r(ctx, 1 + bx, BUMPER_B - 3, W - 2, 3, C.tanShadow);
+  r(ctx, 4 + bx, BUMPER_T + 6, W - 8, 4, C.chromeDark); // rub strip
+  r(ctx, 4 + bx, BUMPER_T + 6, W - 8, 1, C.chrome);
+  rSym(ctx, W, 1 + bx, BUMPER_T, 5, BUMPER_B - BUMPER_T, C.tanShadow);
 
-  // Body slab: tall and square, which is the entire point of a minivan.
-  r(ctx, 6 + bx, 18, W - 12, H - 50, C.tan);
-  r(ctx, 6 + bx, 18, W - 12, 3, C.tanLit);
-  r(ctx, 6 + bx, H - 36, W - 12, 4, C.tanMid);
-  r(ctx, 6 + bx, H - 33, W - 12, 2, C.tanShadow);
-  // Body-side crease, the one styling line this thing has.
-  r(ctx, 8 + bx, H - 44, W - 16, 2, C.tanMid);
+  // ---- body ------------------------------------------------------------
+  r(ctx, 3 + bx, 12, W - 6, BUMPER_T - 12, C.tan);
+  r(ctx, 3 + bx, 12, W - 6, 3, C.tanLit);
+  rSym(ctx, W, 3 + bx, 12, 3, BUMPER_T - 12, C.tanMid);  // side radius
+  r(ctx, 3 + bx, BUMPER_T - 3, W - 6, 3, C.tanMid);
 
-  // Roof and D-pillars.
-  r(ctx, 12 + rx, 8, W - 24, 12, C.tan);
-  r(ctx, 12 + rx, 8, W - 24, 2, C.tanLit);
-  r(ctx, 12 + rx, 18, W - 24, 2, C.tanMid);
+  // ---- roof, spoiler and rack -----------------------------------------
+  r(ctx, 9 + rx, ROOF, W - 18, 8, C.tan);
+  r(ctx, 9 + rx, ROOF, W - 18, 2, C.tanLit);
+  r(ctx, 7 + rx, 10, W - 14, 4, C.tanMid);               // spoiler lip
+  r(ctx, mid - 9 + rx, ROOF + 2, 18, 3, C.tailDeep);     // third brake light
+  r(ctx, mid - 8 + rx, ROOF + 3, 16, 1, C.tail);
+  r(ctx, 20 + rx, RACK, W - 40, 2, C.grey);              // low-profile rails
+  r(ctx, 20 + rx, RACK, W - 40, 1, C.greyLit);
+  rSym(ctx, W, 19 + rx, RACK + 1, 4, 3, C.greyDark);
 
-  // Roof rack: two rails on four feet, plus crossbars.
-  rSym(ctx, W, 16 + rx, 4, 6, 5, C.greyDark);
-  r(ctx, 14 + rx, 2, W - 28, 3, C.grey);
-  r(ctx, 14 + rx, 2, W - 28, 1, C.greyLit);
-  rSym(ctx, W, 13 + rx, 3, 3, 5, C.grey);
-  r(ctx, 30 + rx, 3, 3, 2, C.greyDark);
-  r(ctx, W - 33 + rx, 3, 3, 2, C.greyDark);
+  // ---- liftgate glass --------------------------------------------------
+  r(ctx, 15 + bx, BELT, W - 30, SURROUND_B - BELT, C.black);   // rubber surround
+  r(ctx, 18 + bx, GLASS_T, W - 36, GLASS_B - GLASS_T, C.glass);
+  r(ctx, 19 + bx, GLASS_T + 1, W - 38, 5, C.glassLit);         // sky reflection
+  for (let i = 0; i < 5; i++) {
+    r(ctx, 21 + bx, GLASS_T + 8 + i * 3, W - 42, 1, C.glassDark); // defroster
+  }
+  r(ctx, 20 + bx, GLASS_B - 6, 12, 5, C.glassPale);            // smear
+  r(ctx, mid - 14 + bx, GLASS_B + 1, 28, 2, C.greyDark);       // wiper blade
+  r(ctx, mid - 14 + bx, GLASS_B - 3, 2, 5, C.greyDark);        // wiper arm
+  r(ctx, mid - 3 + bx, BELT - 2, 6, 3, C.greyDark);            // washer nozzle
 
-  // Liftgate glass, with a frame, defroster lines and a wiper.
-  r(ctx, 15 + bx, 21, W - 30, 22, C.chromeDark);
-  r(ctx, 17 + bx, 23, W - 34, 18, C.glass);
-  r(ctx, 18 + bx, 24, W - 36, 5, C.glassLit);
+  // ---- taillights ------------------------------------------------------
+  // Corner to corner, beltline to bumper.  Amber turn on top, red brake
+  // through the middle, clear reverse at the bottom.  Nothing else on the
+  // road has lamps this tall.
+  for (const lx of [3, W - 17]) {
+    r(ctx, lx + bx, BELT, 14, LIGHT_B - BELT, C.tailDeep);
+    r(ctx, lx + 1 + bx, BELT + 1, 12, LIGHT_B - BELT - 2, C.tail);
+    r(ctx, lx + 1 + bx, BELT + 1, 12, 8, C.tailAmber);
+    r(ctx, lx + 1 + bx, BELT + 9, 12, 1, C.tailDeep);
+    r(ctx, lx + 1 + bx, LIGHT_B - 8, 12, 1, C.tailDeep);
+    r(ctx, lx + 1 + bx, LIGHT_B - 7, 12, 6, C.white);          // reverse lamp
+    r(ctx, lx + 3 + bx, BELT + 14, 4, 8, C.tailLit);           // lens highlight
+    r(ctx, lx + 6 + bx, BELT + 12, 1, LIGHT_B - BELT - 24, C.tailLit);
+  }
+
+  // ---- liftgate furniture ---------------------------------------------
+  r(ctx, mid - 22 + bx, HANDLE, 44, 3, C.chrome);              // handle bar
+  r(ctx, mid - 22 + bx, HANDLE, 44, 1, C.chromeLit);
+  r(ctx, mid + 18 + bx, HANDLE + 1, 4, 3, C.greyDark);         // keyhole
+  r(ctx, mid - 6 + bx, PLATE_T - 2, 12, 2, C.greyLit);         // plate lamp
+  r(ctx, mid - 14 + bx, PLATE_T, 28, PLATE_B - PLATE_T, C.chromeDark);
+  r(ctx, mid - 13 + bx, PLATE_T + 1, 26, PLATE_B - PLATE_T - 2, C.white);
+  r(ctx, mid - 11 + bx, PLATE_T + 3, 22, PLATE_B - PLATE_T - 6, C.greyDark);
   for (let i = 0; i < 4; i++) {
-    r(ctx, 20 + bx, 31 + i * 3, W - 40, 1, C.glassDark);
-  }
-  r(ctx, 19 + bx, 37, 10, 4, C.glassPale);          // reflection
-  r(ctx, 27 + bx, 42, 26, 2, C.greyDark);           // wiper blade
-  r(ctx, 27 + bx, 39, 2, 4, C.greyDark);            // wiper arm
-
-  // Tall vertical taillights: the Caravan's one distinguishing feature.
-  for (const [lx, mirror] of [[7, 1], [W - 17, -1]]) {
-    r(ctx, lx + bx, 21, 10, 30, C.tailDeep);
-    r(ctx, lx + 1 + bx, 22, 8, 28, C.tail);
-    r(ctx, lx + 1 + bx, 22, 8, 6, C.tailAmber);     // indicator segment
-    r(ctx, lx + 1 + bx, 36, 8, 2, C.tailDeep);      // segment divider
-    r(ctx, lx + 1 + bx, 44, 8, 6, C.white);         // reverse lamp
-    r(ctx, lx + 2 + bx, 30, 3, 4, C.tailLit);
-    void mirror;
+    r(ctx, mid - 9 + bx + i * 5, PLATE_T + 4, 3, PLATE_B - PLATE_T - 8, C.white);
   }
 
-  // Liftgate handle, keyhole, licence plate and badge.
-  r(ctx, (W >> 1) - 18 + bx, 46, 36, 3, C.chrome);
-  r(ctx, (W >> 1) - 18 + bx, 46, 36, 1, C.chromeLit);
-  r(ctx, (W >> 1) + 14 + bx, 47, 3, 3, C.greyDark);
-  r(ctx, (W >> 1) - 12 + bx, 52, 24, 10, C.white);
-  r(ctx, (W >> 1) - 10 + bx, 54, 20, 6, C.greyDark);
-  r(ctx, (W >> 1) - 9 + bx, 56, 4, 3, C.white);
-  r(ctx, (W >> 1) - 3 + bx, 56, 5, 3, C.white);
-  r(ctx, (W >> 1) + 4 + bx, 56, 4, 3, C.white);
-  r(ctx, (W >> 1) - 8 + bx, 42, 16, 3, C.chromeDark);   // badge
+  // Badging: DODGE left of the plate, CARAVAN right.  Illegible, correct.
+  for (let i = 0; i < 4; i++) r(ctx, 21 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
+  for (let i = 0; i < 5; i++) r(ctx, W - 36 + bx + i * 3, PLATE_T + 3, 2, 3, C.chromeDark);
 
-  // Rust.  Obviously.
-  r(ctx, 8 + bx, H - 40, 9, 7, C.rust);
-  r(ctx, 9 + bx, H - 38, 5, 3, C.rustDark);
-  r(ctx, W - 19 + bx, H - 37, 7, 5, C.rustDark);
-  r(ctx, 10 + bx, H - 28, 5, 4, C.rustDark);
-  r(ctx, W - 24 + bx, H - 27, 4, 3, C.rust);
+  // ---- rust ------------------------------------------------------------
+  // Enough to date the thing; not so much that it reads as camouflage.
+  r(ctx, 5 + bx, BUMPER_T - 10, 9, 6, C.rust);
+  r(ctx, 6 + bx, BUMPER_T - 8, 5, 3, C.rustDark);
+  r(ctx, W - 18 + bx, BUMPER_T - 9, 6, 4, C.rustDark);
+  r(ctx, 11 + bx, BUMPER_B - 5, 5, 3, C.rustDark);
+  r(ctx, W - 26 + bx, BUMPER_T + 2, 4, 3, C.rust);
 
-  // The roof-mounted cannon.  Not factory.
-  r(ctx, (W >> 1) - 7 + rx, 3, 14, 8, C.steelDark);
-  r(ctx, (W >> 1) - 5 + rx, 4, 10, 3, C.steel);
-  r(ctx, (W >> 1) - 3 + rx, 0, 6, 6, C.steelDark);
-  r(ctx, (W >> 1) - 2 + rx, 0, 4, 5, C.steel);
-  r(ctx, (W >> 1) - 1 + rx, 0, 2, 3, C.chromeLit);
+  // ---- the roof-mounted cannon.  Not factory. --------------------------
+  r(ctx, mid - 10 + rx, RACK, 20, 5, C.steelDark);             // mount plate
+  rSym(ctx, W, mid - 10 + rx, RACK, 3, 5, C.chromeDark);       // bolts
+  r(ctx, mid - 5 + rx, 0, 10, 4, C.steel);
+  r(ctx, mid - 3 + rx, 0, 6, 3, C.steelDark);
+  r(ctx, mid - 1 + rx, 0, 2, 2, C.chromeLit);
 }
 
 /** Where the van's lamps sit, for the night-lighting pass. */
 const VAN_LAMPS = [
-  { x: 0.09, y: 0.27, w: 0.11, h: 0.36, c: 'rgba(255,70,30,0.55)' },
-  { x: 0.80, y: 0.27, w: 0.11, h: 0.36, c: 'rgba(255,70,30,0.55)' },
+  { x: 0.03, y: 0.18, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
+  { x: 0.83, y: 0.18, w: 0.14, h: 0.49, c: 'rgba(255,70,30,0.55)' },
+  { x: 0.41, y: 0.09, w: 0.18, h: 0.04, c: 'rgba(255,60,25,0.5)' },
 ];
 
 // ------------------------------------------------------------- generic cars
@@ -582,6 +622,40 @@ function drawPlane(ctx, W, H) {
   ];
 }
 
+/**
+ * Overhead sign gantry.
+ *
+ * Hollow through the middle like the finish banner, for the same reason: you
+ * drive under it, and a solid one would black out the road on approach.
+ */
+function drawGantry(ctx, W, H) {
+  // Legs.
+  rSym(ctx, W, 3, 26, 10, H - 26, C.steelDark);
+  rSym(ctx, W, 3, 26, 4, H - 26, C.steel);
+  rSym(ctx, W, 1, H - 4, 14, 4, C.greyDark);
+  for (let y = 34; y < H - 6; y += 14) rSym(ctx, W, 3, y, 10, 3, C.chromeDark);
+  // Truss beam across the top.
+  r(ctx, 0, 4, W, 5, C.steelDark);
+  r(ctx, 0, 20, W, 5, C.steelDark);
+  for (let x = 4; x < W - 4; x += 14) {
+    r(ctx, x, 9, 3, 11, C.steelDark);
+    r(ctx, x + 7, 9, 3, 11, C.chromeDark);
+  }
+  // Two green sign boards hanging off it.
+  for (const [bx, bw] of [[16, 62], [W - 78, 62]]) {
+    r(ctx, bx, 8, bw, 22, C.greenDark);
+    r(ctx, bx, 8, bw, 2, C.green);
+    r(ctx, bx + 3, 11, bw - 6, 2, C.white);
+    r(ctx, bx + 3, 25, bw - 6, 2, C.white);
+    let tx = bx + 7;
+    for (const wl of [4, 3, 5]) { r(ctx, tx, 15, wl * 3, 4, C.white); tx += wl * 3 + 4; }
+  }
+  return [
+    { x: 20 / W, y: 30 / H, w: 8 / W, h: 3 / H, c: 'rgba(255,238,150,0.6)' },
+    { x: (W - 30) / W, y: 30 / H, w: 8 / W, h: 3 / H, c: 'rgba(255,238,150,0.6)' },
+  ];
+}
+
 // ---------------------------------------------------------------- finish line
 
 function drawBanner(ctx, W, H) {
@@ -618,7 +692,7 @@ export function buildSprites() {
   SPR.van = [];
   for (let i = 0; i < 5; i++) {
     const lean = (i - 2) / 2;
-    SPR.van.push(bake(88, 80, 0.40, (ctx) => drawCaravan(ctx, 88, 80, lean), VAN_LAMPS));
+    SPR.van.push(bake(100, 78, 0.44, (ctx) => drawCaravan(ctx, 100, 78, lean), VAN_LAMPS));
   }
 
   const car = (w, h, worldW, opts) => {
@@ -691,6 +765,8 @@ export function buildSprites() {
   SPR.plane = bake(128, 68, 1.30, (c) => { lamps = drawPlane(c, 128, 68); });
   SPR.plane.lamps = lamps;
   SPR.banner = bake(192, 88, 2.10, (c) => drawBanner(c, 192, 88));
+  SPR.gantry = bake(208, 96, 2.35, (c) => { lamps = drawGantry(c, 208, 96); });
+  SPR.gantry.lamps = lamps;
 
   return SPR;
 }

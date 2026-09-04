@@ -200,7 +200,8 @@ function drawDebug() {
     `POS ${(game.position / K.SEG_LENGTH).toFixed(1)} SEG  X ${game.playerX.toFixed(2)}`,
     `SPD ${game.speed.toFixed(0)}  ${game.mph} MPH  OFFROAD ${game.offRoad ? 'Y' : 'N'}`,
     `CARS ${game.enemies.length}  BUL ${game.bullets.activeCount}  PRT ${game.particles.activeCount}`,
-    `STATE ${game.state}  FUEL ${game.fuel.toFixed(1)}`,
+    `STATE ${game.state}  MAIN ${game.fuel.toFixed(1)} RES ${game.reserve.toFixed(1)}`,
+    `MULT x${game.multiplier} CHAIN ${game.chain}`,
   ];
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(0, 60, 178, lines.length * 8 + 4);

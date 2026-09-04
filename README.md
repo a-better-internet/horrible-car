@@ -62,9 +62,21 @@ that range rather than snapping to full lock, so keys feel like a wheel.
 
 **Fuel is the whole game.** There are no lives. Fuel is the timer, the health
 bar and the end-of-stage bonus simultaneously. It drains with speed, and
-wrecks, sideswipes and turret hits all cost it. Run dry and the rally is over
-wherever you happen to be standing. One tank does not cover a stage, so
-collecting globes is not optional.
+wrecks, sideswipes and turret hits all cost it. One tank does not cover a
+stage, so collecting globes is not optional.
+
+It is split into a **main tank and a reserve**, as the cabinet's HUD showed
+it. That split is the tension: the main tank running dry is not the end, it is
+the warning. What follows is a short, loud, obviously-final stretch where every
+globe matters. Globes fill the main tank first and overflow into the reserve.
+Run both dry and the rally ends wherever you happen to be standing.
+
+**The multiplier** climbs one step per four kills or clean passes and resets to
+1 on any wreck, up to ×8. It applies to kills and near misses but not to
+distance, pickups or the end-of-stage payout — so it rewards fighting through
+traffic rather than merely surviving it. A **near miss** is scored the moment
+you go past a car you did not hit, which is what makes threading the gap worth
+more than shooting a hole in it.
 
 **The camera** sits high and well back, as the arcade's did. That framing is
 not decoration: a low chase camera hides the very lane you are shooting into.
@@ -162,10 +174,31 @@ done about them here:
   recycle rather than grow. A 5-minute soak moves the heap 9.5 MB → 9.5 MB.
 - **Storage that throws.** `localStorage` is wrapped; private mode loses your
   high score rather than the game.
+- **A road that reads as a treadmill.** Long straights get patched asphalt,
+  expansion joints on a 12-segment cast and the occasional set of skid marks,
+  so the eye has irregular features to measure speed against. Narrow bridge
+  sections get guardrails, which is exactly where you most want a cue that the
+  shoulder has run out.
 
 Measured at 640×480 on the last stage with maximum traffic and repeated cruise
-missiles: median frame 16.7 ms, p95 17.1 ms, peak 27 cars and 193 particles
-live.
+missiles: median frame 16.7 ms, p95 17.0 ms, worst 18.4 ms, peak 30 cars and
+214 particles live.
+
+## The van
+
+It is a second-generation (1991–95) Dodge Caravan, and it is drawn from the
+shapes that actually identify one from behind: full-height vertical taillights
+at the extreme corners running beltline to bumper, a wide rubber-framed
+liftgate window with a single centre wiper, a recessed licence plate low and
+central, a deep full-width bumper over a dark valance — and tyres that barely
+show, because from directly behind you see the bottom corners of them and
+nothing else. Drawing those as big blocks is what made an earlier pass read as
+a safari truck.
+
+Its headlights are on the front, which from a chase camera is the end you
+cannot see. The beams therefore start about a third of the way up the sprite
+and fan out past the bodywork; springing them from the rear bumper line makes
+the light look like it is leaking out from underneath.
 
 ## The city
 

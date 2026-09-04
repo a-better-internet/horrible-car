@@ -146,6 +146,7 @@ export function makeEnemy(type, x, z) {
     fireTimer: 0.6 + Math.random(),
     hitFlash: 0,
     dead: false,
+    passed: false,
     seg: 0,
     sprite: def.sprite,
     _render: 'enemy',
@@ -302,6 +303,16 @@ export function populateTrack(track, stage, rng) {
       tur.kind = 'turret';
       add(n, tur);
     }
+  }
+
+  // ---- overhead sign gantries -----------------------------------------
+  // Rare, and always on a straight-ish stretch, so the first thing you see
+  // through one is the road rather than the gantry's own legs.
+  for (let n = 90; n < finish - 60; n += rng.int(150, 320)) {
+    add(n, {
+      kind: 'prop', sprite: 'gantry', x: 0, w: SPR.gantry.worldW,
+      solid: false, hp: 0, dead: false, yWorld: 0,
+    });
   }
 
   // ---- finish line -----------------------------------------------------

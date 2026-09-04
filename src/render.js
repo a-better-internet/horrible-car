@@ -13,7 +13,7 @@
  */
 
 import * as K from './config.js';
-import { project } from './road.js';
+import { project, DECO } from './road.js';
 import { THEMES, UI, mix, cssa } from './palette.js';
 import { SPR } from './sprites.js';
 import { skylineFor, TILE_W, TILE_H } from './skyline.js';
@@ -305,6 +305,32 @@ export class Renderer {
     ctx.fillStyle = road;
     polygon(ctx, p1.x - p1.w, p1.y, p1.x + p1.w, p1.y, p2.x + p2.w, p2.y, p2.x - p2.w, p2.y);
 
+    // ---- surface decoration --------------------------------------------
+    // Cheap, but it is what stops a long straight from reading as a
+    // treadmill: the eye needs irregular features to measure speed against.
+    if (seg.deco && p1.w > 3) {
+      if (seg.deco & DECO.PATCH) {
+        ctx.fillStyle = seg.alt ? theme.road[1] : theme.road[0];
+        polygon(ctx,
+          p1.x - p1.w * 0.62, p1.y, p1.x + p1.w * 0.10, p1.y,
+          p2.x + p2.w * 0.10, p2.y, p2.x - p2.w * 0.62, p2.y);
+      }
+      if (seg.deco & DECO.SKID) {
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        for (const off of [-0.30, -0.16]) {
+          polygon(ctx,
+            p1.x + p1.w * off, p1.y, p1.x + p1.w * (off + 0.07), p1.y,
+            p2.x + p2.w * (off + 0.07), p2.y, p2.x + p2.w * off, p2.y);
+        }
+      }
+      if (seg.deco & DECO.JOINT) {
+        ctx.fillStyle = 'rgba(0,0,0,0.34)';
+        polygon(ctx,
+          p1.x - p1.w, p1.y, p1.x + p1.w, p1.y,
+          p2.x + p2.w, p2.y, p2.x - p2.w, p2.y);
+      }
+    }
+
     // Lane markings on the light band only, so they read as dashes.
     if (!seg.alt && p1.w > 2) {
       const lanes = K.LANES;
@@ -319,6 +345,25 @@ export class Renderer {
         polygon(ctx, lx1 - t1, p1.y, lx1 + t1, p1.y, lx2 + t2, p2.y, lx2 - t2, p2.y);
         lx1 += lw1;
         lx2 += lw2;
+      }
+    }
+
+    // ---- guardrails ------------------------------------------------------
+    // Only on the narrow sections.  A bridge with nothing at the edge is
+    // exactly where you most want a visual cue that the shoulder has gone.
+    if ((seg.deco & DECO.RAIL) && p1.w > 2) {
+      const railH = Math.max(2, Math.round(p1.w * 0.20));
+      const postW = Math.max(1, Math.round(p1.w * 0.05));
+      for (const side of [-1, 1]) {
+        const x1 = p1.x + side * (p1.w + p1.w * 0.10);
+        const x2 = p2.x + side * (p2.w + p2.w * 0.10);
+        ctx.fillStyle = theme.rumble[0];
+        polygon(ctx, x1, p1.y - railH, x1 + side * postW * 2, p1.y - railH,
+          x2 + side * postW * 2, p2.y - railH * 0.7, x2, p2.y - railH * 0.7);
+        if (!seg.alt) {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(Math.round(x1), Math.round(p1.y - railH), postW, railH);
+        }
       }
     }
 
@@ -486,6 +531,13 @@ export class Renderer {
     const y = Math.round(p.y - p.scale * b.y * H * 0.5);
     const ctx = this.ctx;
     if (y > seg.clip) return;
+    // Tracer: a faint tail behind a hot core, so a round in flight reads as
+    // motion rather than as a dot that happens to be in a new place.
+    const len = Math.max(3, size * 3);
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = b.hostile ? UI.red : UI.amber;
+    ctx.fillRect(x - (size >> 2) - 1, y - size, Math.max(1, size >> 1) + 1, len);
+    ctx.globalAlpha = 1;
     ctx.fillStyle = b.hostile ? UI.red : UI.yellow;
     ctx.fillRect(x - (size >> 1), y - size, Math.max(1, size), Math.max(2, size * 2));
     ctx.fillStyle = UI.white;
@@ -554,7 +606,7 @@ export class Renderer {
     const destX = Math.round(W / 2 - destW / 2) + lean;
 
     // Headlights, before the van so the beams read as coming from under it.
-    if (theme.dark > 0.08) this._drawHeadlights(g, theme, destX, destW, groundY);
+    if (theme.dark > 0.08) this._drawHeadlights(g, theme, destX, destW, destY, destH);
 
     // Ground shadow, drawn flat and unrotated: a shadow that spins with a
     // wrecking van reads as a black wedge stuck to the bodywork.
@@ -577,6 +629,21 @@ export class Renderer {
       ctx.drawImage(spr.canvas, destX, destY, destW, destH);
     }
     ctx.globalAlpha = 1;
+
+    // Muzzle flash at the roof cannon.  Additive, and gone in a frame or two.
+    if (g.muzzleFlash > 0) {
+      const f = clamp(g.muzzleFlash / 0.06, 0, 1);
+      const mx = destX + destW / 2;
+      const my = destY + destH * 0.02;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = f;
+      ctx.fillStyle = UI.yellow;
+      ctx.fillRect(mx - destW * 0.10, my - 5 * R, destW * 0.20, 6 * R);
+      ctx.fillStyle = UI.white;
+      ctx.fillRect(mx - destW * 0.04, my - 8 * R, destW * 0.08, 8 * R);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
 
     // Brake lights.
     if (g.braking) {
@@ -639,38 +706,63 @@ export class Renderer {
   /**
    * Headlight beams.
    *
-   * Two cones springing from the van's own lamps and falling off up the road,
-   * plus a bright pool right in front of the bumper.  Drawn additively so
-   * they brighten whatever they land on instead of fogging it.
+   * The lamps are on the FRONT of the van, which from a chase camera is the
+   * end you cannot see: it is further away, so it projects higher up the
+   * screen and slightly narrower than the tailgate.  Springing the beams from
+   * the rear bumper line instead makes the light look like it is leaking out
+   * from under the car.
+   *
+   * So the cones start about a third of the way up the sprite, at roughly the
+   * van's own width, and fan out and away up the road.  Because this is drawn
+   * before the van, the bodywork masks the origin and the light reads as
+   * coming past it from in front.
    */
-  _drawHeadlights(g, theme, vanX, vanW, groundY) {
+  _drawHeadlights(g, theme, vanX, vanW, vanTop, vanH) {
     const ctx = this.ctx;
-    const reach = H * 0.30;
-    const strength = 0.16 + theme.dark * 0.55;
-    const flicker = 1 - Math.random() * 0.05;
+    const cx = vanX + vanW / 2;
+    // Origin at the front axle line, hidden behind the van's own body.
+    const originY = vanTop + vanH * 0.34;
+    const reach = H * 0.34;
+    const topY = originY - reach;
+    const strength = 0.14 + theme.dark * 0.50;
+    const flicker = 1 - Math.random() * 0.04;
 
     ctx.globalCompositeOperation = 'lighter';
+
     for (const side of [-1, 1]) {
-      const lx = vanX + vanW / 2 + side * vanW * 0.34;
-      const grad = ctx.createLinearGradient(0, groundY, 0, groundY - reach);
+      // Lamp sits just inboard of the body side.
+      const lx = cx + side * vanW * 0.36;
+      const nearHalf = vanW * 0.14;
+      const farHalf = vanW * 1.05;
+
+      const grad = ctx.createLinearGradient(0, originY, 0, topY);
       grad.addColorStop(0, `rgba(255,244,196,${(strength * flicker).toFixed(3)})`);
-      grad.addColorStop(0.45, `rgba(255,240,180,${(strength * 0.45).toFixed(3)})`);
+      grad.addColorStop(0.35, `rgba(255,240,180,${(strength * 0.52).toFixed(3)})`);
       grad.addColorStop(1, 'rgba(255,240,180,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(lx - vanW * 0.16, groundY);
-      ctx.lineTo(lx + vanW * 0.16, groundY);
-      ctx.lineTo(lx + vanW * 0.95, groundY - reach);
-      ctx.lineTo(lx - vanW * 0.95, groundY - reach);
+      ctx.moveTo(lx - nearHalf, originY);
+      ctx.lineTo(lx + nearHalf, originY);
+      ctx.lineTo(lx + side * 0.2 * vanW + farHalf, topY);
+      ctx.lineTo(lx + side * 0.2 * vanW - farHalf, topY);
       ctx.closePath();
       ctx.fill();
     }
-    // Hot pool directly ahead of the bumper.
-    const pool = ctx.createLinearGradient(0, groundY, 0, groundY - reach * 0.34);
-    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.7).toFixed(3)})`);
+
+    // Hot pool of light on the tarmac just in front of the bumper.
+    const poolTop = originY - reach * 0.30;
+    const pool = ctx.createLinearGradient(0, originY, 0, poolTop);
+    pool.addColorStop(0, `rgba(255,248,214,${(strength * 0.62).toFixed(3)})`);
     pool.addColorStop(1, 'rgba(255,248,214,0)');
     ctx.fillStyle = pool;
-    ctx.fillRect(vanX - vanW * 0.35, groundY - reach * 0.34, vanW * 1.7, reach * 0.34);
+    ctx.beginPath();
+    ctx.moveTo(cx - vanW * 0.40, originY);
+    ctx.lineTo(cx + vanW * 0.40, originY);
+    ctx.lineTo(cx + vanW * 0.85, poolTop);
+    ctx.lineTo(cx - vanW * 0.85, poolTop);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.globalCompositeOperation = 'source-over';
     void g;
   }

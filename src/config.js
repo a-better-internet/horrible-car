@@ -85,8 +85,19 @@ export const WHEEL_ACCEL = 4.6;       // units/sec toward full lock
 export const WHEEL_RETURN = 6.2;      // units/sec back to centre when released
 
 // ---------------------------------------------------------------- fuel/timer
+/*
+ * Fuel, in two tanks.
+ *
+ * The cabinet's HUD read "FUEL / RESERVE / MAIN TANK", and splitting it that
+ * way is the whole tension of the game: the main tank running dry is not the
+ * end, it is the warning.  What follows is a short, loud, obviously-final
+ * stretch on the reserve where every globe matters.
+ */
 export const FUEL_MAX = 100;
-export const FUEL_START = 74;
+export const FUEL_START = 72;
+export const RESERVE_MAX = 30;
+export const RESERVE_START = 30;
+export const RESERVE_STAGE_BONUS = 9;
 export const FUEL_IDLE_DRAIN = 1.45;  // per second at a standstill
 export const FUEL_SPEED_DRAIN = 3.05; // extra per second at full throttle
 export const FUEL_GLOBE = 11;
@@ -97,7 +108,7 @@ export const FUEL_STAGE_BONUS = 26;   // topped up between stages
 
 // ---------------------------------------------------------------- dimensions
 // All widths are fractions of ROAD_WIDTH (the road half-width).
-export const VAN_WIDTH = 0.40;
+export const VAN_WIDTH = 0.44;
 export const VAN_LENGTH = 420;        // road units, for z-overlap tests
 
 // ---------------------------------------------------------------- weapons
@@ -136,14 +147,27 @@ export const SIDESWIPE_KICK = 0.55;   // lateral shove, in road-widths/sec
 export const INVULN_AFTER_CRASH = 1.6;
 
 // ---------------------------------------------------------------- scoring
+/*
+ * Scoring.
+ *
+ * Kill and near-miss points are multiplied; distance, pickups and the
+ * end-of-stage payout are not, so the multiplier rewards fighting rather than
+ * simply surviving.
+ */
 export const SCORE = {
   sedan: 200, coupe: 350, cycle: 250, command: 600, turret: 450,
-  mine: 100, globe: 150, pod: 300,
+  mine: 100, globe: 150, pod: 300, nearMiss: 80,
   perFuelUnit: 100,     // end-of-stage bonus
   stageClear: 2000,
   distance: 1,          // per segment travelled
-  extraLifeless: 0,     // Road Blasters has no lives; fuel is everything
 };
+
+/** Multiplier: climbs with kills and clean passes, resets on a wreck. */
+export const MULTIPLIER_MAX = 8;
+export const CHAIN_PER_LEVEL = 4;     // chained hits per multiplier step
+export const CHAIN_TIMEOUT = 6.0;     // seconds of no action before it decays
+/** Lateral gap, in road half-widths, that still counts as a near miss. */
+export const NEAR_MISS_X = 0.62;
 
 // ---------------------------------------------------------------- stages
 export const TOTAL_STAGES = 50;

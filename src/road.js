@@ -25,6 +25,18 @@ import { makeRNG, lerp } from './util.js';
  * Mutates p.camera and p.screen in place (these objects are reused every
  * frame; allocating here would churn the GC at 60Hz).
  */
+/**
+ * Surface decoration flags.  Purely cosmetic, but they are what stops a
+ * hundred identical segments from reading as a treadmill: patched asphalt and
+ * expansion joints give the eye something to measure speed against.
+ */
+export const DECO = {
+  PATCH: 1,       // a darker rectangle of newer asphalt
+  JOINT: 2,       // transverse expansion joint
+  SKID: 4,        // somebody else's bad day
+  RAIL: 8,        // guardrail along both edges
+};
+
 export function project(p, camX, camY, camZ, camDepth, width, height, roadWidth) {
   p.camera.x = p.world.x - camX;
   p.camera.y = p.world.y - camY;
@@ -87,6 +99,7 @@ export class Track {
         curve,
         width,               // road half-width multiplier (bridges narrow this)
         alt: Math.floor(n / 3) % 2 === 0, // stripe alternation, 3 segs per band
+        deco: 0,
         objects: [],         // static props & pickups anchored to this segment
         dyn: [],             // dynamic things bucketed here by the renderer
         clip: 0,             // filled in each frame by the renderer
@@ -212,7 +225,45 @@ export function buildTrack(stage) {
   // Horizon padding past the finish so the world does not fall away.
   track.addSegments(DRAW_PADDING, 0, y);
 
+  decorate(track, rng);
+
   return track;
+}
+
+/**
+ * Scatter surface decoration over a finished track.
+ *
+ * Expansion joints are regular (they are cast that way); patches and skids are
+ * random.  Guardrails follow the narrow sections automatically, because a
+ * bridge with nothing at the edge is the one place you most want a visual cue
+ * that the shoulder has run out.
+ */
+function decorate(track, rng) {
+  const segs = track.segments;
+  // Expansion joints every 12 segments, like real concrete slab paving.
+  for (let i = 0; i < segs.length; i += 12) segs[i].deco |= DECO.JOINT;
+
+  // Patched asphalt in runs of 2-5 segments.
+  for (let i = 20; i < segs.length - 6; i += rng.int(18, 60)) {
+    const run = rng.int(2, 5);
+    for (let k = 0; k < run && i + k < segs.length; k++) segs[i + k].deco |= DECO.PATCH;
+  }
+
+  // Skid marks, usually just before something worth braking for.
+  for (let i = 30; i < segs.length - 8; i += rng.int(40, 150)) {
+    const run = rng.int(3, 7);
+    for (let k = 0; k < run && i + k < segs.length; k++) segs[i + k].deco |= DECO.SKID;
+  }
+
+  // Guardrails wherever the road narrows, plus a segment either side so the
+  // rail does not start and stop in mid-air.
+  for (let i = 1; i < segs.length - 1; i++) {
+    if (segs[i].width < 0.8) {
+      segs[i].deco |= DECO.RAIL;
+      segs[i - 1].deco |= DECO.RAIL;
+      segs[i + 1].deco |= DECO.RAIL;
+    }
+  }
 }
 
 export const STAGE_NAMES = [
